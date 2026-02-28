@@ -1,0 +1,11 @@
+name: "{{PROJECT_NAME}}"
+arch: "{{ARCH}}"
+platform: "linux"
+version: "{{VERSION}}"
+maintainer: "Keath Milligan <keath@keathmilligan.net>"
+description: "{{DESCRIPTION}}"
+homepage: "{{HOMEPAGE}}"
+license: "{{LICENSE}}"
+contents:
+  - src: ./{{BINARY_NAME}}
+    dst: /usr/bin/{{BINARY_NAME}}

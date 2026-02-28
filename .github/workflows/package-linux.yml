@@ -1,0 +1,128 @@
+name: Package Linux (deb/rpm/apk)
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      binary-name:
+        description: Name of the binary
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+      targets:
+        description: JSON array of Linux target triples
+        required: true
+        type: string
+      enable-apt:
+        required: false
+        type: boolean
+        default: false
+      enable-rpm:
+        required: false
+        type: boolean
+        default: false
+      enable-apk:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            nfpm-arch: amd64
+            rpm-arch: x86_64
+          - target: aarch64-unknown-linux-gnu
+            nfpm-arch: arm64
+            rpm-arch: aarch64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check if target was built
+        id: check
+        run: |
+          if echo '${{ inputs.targets }}' | jq -e 'index("${{ matrix.target }}")' > /dev/null 2>&1; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install nfpm
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          curl -sfL https://install.goreleaser.com/github.com/goreleaser/nfpm.sh | sh -s -- -b /usr/local/bin
+
+      - name: Download binary
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: packaging/
+
+      - name: Make binary executable
+        if: steps.check.outputs.skip != 'true'
+        run: chmod +x "packaging/${{ inputs.binary-name }}"
+
+      - name: Build deb package
+        if: steps.check.outputs.skip != 'true' && inputs.enable-apt
+        run: |
+          nfpm package \
+            --config dist/nfpm.yaml \
+            --packager deb \
+            --target "packaging/" \
+            --version "${{ inputs.version }}"
+
+      - name: Build rpm package
+        if: steps.check.outputs.skip != 'true' && inputs.enable-rpm
+        run: |
+          nfpm package \
+            --config dist/nfpm.yaml \
+            --packager rpm \
+            --target "packaging/" \
+            --version "${{ inputs.version }}"
+
+      - name: Build apk package
+        if: steps.check.outputs.skip != 'true' && inputs.enable-apk
+        run: |
+          nfpm package \
+            --config dist/nfpm.yaml \
+            --packager apk \
+            --target "packaging/" \
+            --version "${{ inputs.version }}"
+
+      - name: Upload deb artifact
+        if: steps.check.outputs.skip != 'true' && inputs.enable-apt
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.nfpm-arch }}
+          path: packaging/*.deb
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload rpm artifact
+        if: steps.check.outputs.skip != 'true' && inputs.enable-rpm
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.rpm-arch }}
+          path: packaging/*.rpm
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload apk artifact
+        if: steps.check.outputs.skip != 'true' && inputs.enable-apk
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ matrix.nfpm-arch }}
+          path: packaging/*.apk
+          if-no-files-found: error
+          retention-days: 1

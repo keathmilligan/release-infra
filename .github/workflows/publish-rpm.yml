@@ -1,0 +1,52 @@
+name: Publish to rpm Repository
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+      packages-repo:
+        description: Packages repository (owner/repo)
+        required: false
+        type: string
+        default: "keathmilligan/packages"
+    secrets:
+      PACKAGES_REPO_TOKEN:
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download rpm artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rpm-*
+          path: rpms/
+          merge-multiple: true
+
+      - name: Upload rpms to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          files: rpms/*.rpm
+
+      - name: Trigger packages repo update
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PACKAGES_REPO_TOKEN }}
+          repository: ${{ inputs.packages-repo }}
+          event-type: update-rpm
+          client-payload: |
+            {
+              "project": "${{ inputs.project-name }}",
+              "version": "${{ inputs.version }}",
+              "repo": "${{ github.repository }}",
+              "run_id": "${{ github.run_id }}"
+            }
