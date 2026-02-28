@@ -1,0 +1,108 @@
+name: Publish to AUR
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+      binary-name:
+        description: Name of the binary (defaults to project-name)
+        required: false
+        type: string
+        default: ""
+      description:
+        description: Project description
+        required: false
+        type: string
+        default: ""
+      homepage:
+        description: Project homepage
+        required: false
+        type: string
+        default: ""
+      license:
+        description: Project license
+        required: false
+        type: string
+        default: "MIT"
+    secrets:
+      AUR_SSH_PRIVATE_KEY:
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download SHA256SUMS
+        run: |
+          curl -fsSL -o SHA256SUMS \
+            "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/SHA256SUMS"
+
+      - name: Extract checksums
+        id: checksums
+        run: |
+          PROJECT="${{ inputs.project-name }}"
+          VERSION="${{ inputs.version }}"
+
+          get_sha() {
+            grep "${PROJECT}-${VERSION}-${1}.tar.gz" SHA256SUMS | awk '{print $1}' || echo ""
+          }
+
+          echo "linux-x86_64=$(get_sha x86_64-unknown-linux-gnu)" >> "$GITHUB_OUTPUT"
+          echo "linux-arm64=$(get_sha aarch64-unknown-linux-gnu)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate PKGBUILD
+        run: |
+          BINARY="${{ inputs.binary-name || inputs.project-name }}"
+
+          # Read project PKGBUILD template if it exists, otherwise use default
+          if [ -f "dist/PKGBUILD" ]; then
+            cp dist/PKGBUILD PKGBUILD
+          else
+            cat > PKGBUILD << 'PKGEOF'
+          # Maintainer: Keath Milligan <keath@keathmilligan.net>
+          pkgname=${{ inputs.project-name }}-bin
+          pkgver=${{ inputs.version }}
+          pkgrel=1
+          pkgdesc='${{ inputs.description }}'
+          arch=('x86_64' 'aarch64')
+          url='${{ inputs.homepage }}'
+          license=('${{ inputs.license }}')
+          provides=('${{ inputs.project-name }}')
+          conflicts=('${{ inputs.project-name }}')
+
+          source_x86_64=("https://github.com/${{ github.repository }}/releases/download/v${pkgver}/${{ inputs.project-name }}-${pkgver}-x86_64-unknown-linux-gnu.tar.gz")
+          source_aarch64=("https://github.com/${{ github.repository }}/releases/download/v${pkgver}/${{ inputs.project-name }}-${pkgver}-aarch64-unknown-linux-gnu.tar.gz")
+
+          sha256sums_x86_64=('${{ steps.checksums.outputs.linux-x86_64 }}')
+          sha256sums_aarch64=('${{ steps.checksums.outputs.linux-arm64 }}')
+
+          package() {
+            install -Dm755 "${BINARY}" "${pkgdir}/usr/bin/${BINARY}"
+          }
+          PKGEOF
+          fi
+
+          # Substitute version and checksums in PKGBUILD
+          sed -i "s/pkgver=.*/pkgver=${{ inputs.version }}/" PKGBUILD
+          sed -i "s/sha256sums_x86_64=.*/sha256sums_x86_64=('${{ steps.checksums.outputs.linux-x86_64 }}')/" PKGBUILD
+          sed -i "s/sha256sums_aarch64=.*/sha256sums_aarch64=('${{ steps.checksums.outputs.linux-arm64 }}')/" PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3
+        with:
+          pkgname: ${{ inputs.project-name }}-bin
+          pkgbuild: PKGBUILD
+          commit_username: keathmilligan
+          commit_email: keath@keathmilligan.net
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ inputs.version }}"
