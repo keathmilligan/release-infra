@@ -1,0 +1,319 @@
+name: Release Orchestrator
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      binary-name:
+        description: Name of the binary
+        required: true
+        type: string
+      project-type:
+        description: "Project type: rust or node"
+        required: true
+        type: string
+        default: rust
+      targets:
+        description: Comma-separated list of Rust target triples
+        required: true
+        type: string
+      bundle-id:
+        description: macOS bundle identifier (required for macOS signing)
+        required: false
+        type: string
+        default: ""
+      node-version:
+        description: Node.js version (for node projects)
+        required: false
+        type: string
+        default: "20"
+      enable-homebrew:
+        required: false
+        type: boolean
+        default: false
+      enable-scoop:
+        required: false
+        type: boolean
+        default: false
+      enable-chocolatey:
+        required: false
+        type: boolean
+        default: false
+      enable-winget:
+        required: false
+        type: boolean
+        default: false
+      enable-apt:
+        required: false
+        type: boolean
+        default: false
+      enable-rpm:
+        required: false
+        type: boolean
+        default: false
+      enable-apk:
+        required: false
+        type: boolean
+        default: false
+      enable-dmg:
+        required: false
+        type: boolean
+        default: false
+      enable-aur:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # ─── Version extraction and validation ───────────────────────────
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      has-macos-targets: ${{ steps.targets.outputs.has-macos }}
+      has-windows-targets: ${{ steps.targets.outputs.has-windows }}
+      has-linux-targets: ${{ steps.targets.outputs.has-linux }}
+      macos-targets-json: ${{ steps.targets.outputs.macos-json }}
+      windows-targets-json: ${{ steps.targets.outputs.windows-json }}
+      linux-targets-json: ${{ steps.targets.outputs.linux-json }}
+      all-targets-json: ${{ steps.targets.outputs.all-json }}
+      target-matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $VERSION from tag: $TAG"
+
+      - name: Validate Cargo.toml version
+        if: inputs.project-type == 'rust'
+        run: |
+          CARGO_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Version mismatch: Cargo.toml has $CARGO_VERSION but tag is v$TAG_VERSION"
+            exit 1
+          fi
+
+      - name: Parse targets
+        id: targets
+        run: |
+          IFS=',' read -ra TARGETS <<< "${{ inputs.targets }}"
+
+          MACOS=()
+          WINDOWS=()
+          LINUX=()
+          MATRIX='[]'
+
+          for t in "${TARGETS[@]}"; do
+            t=$(echo "$t" | xargs)  # trim whitespace
+            if [[ "$t" == *"apple-darwin"* ]]; then
+              MACOS+=("\"$t\"")
+              MATRIX=$(echo "$MATRIX" | jq --arg t "$t" '. + [{"target": $t, "runner": "macos-latest", "use-cross": false}]')
+            elif [[ "$t" == *"windows"* ]]; then
+              WINDOWS+=("\"$t\"")
+              MATRIX=$(echo "$MATRIX" | jq --arg t "$t" '. + [{"target": $t, "runner": "windows-latest", "use-cross": false}]')
+            elif [[ "$t" == *"linux"* ]]; then
+              LINUX+=("\"$t\"")
+              USE_CROSS="false"
+              if [[ "$t" == *"aarch64"* ]] || [[ "$t" == *"musl"* ]]; then
+                USE_CROSS="true"
+              fi
+              MATRIX=$(echo "$MATRIX" | jq --arg t "$t" --argjson cross "$USE_CROSS" '. + [{"target": $t, "runner": "ubuntu-latest", "use-cross": $cross}]')
+            fi
+          done
+
+          echo "has-macos=$( [ ${#MACOS[@]} -gt 0 ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+          echo "has-windows=$( [ ${#WINDOWS[@]} -gt 0 ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+          echo "has-linux=$( [ ${#LINUX[@]} -gt 0 ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+          echo "macos-json=[$(IFS=,; echo "${MACOS[*]}")]" >> "$GITHUB_OUTPUT"
+          echo "windows-json=[$(IFS=,; echo "${WINDOWS[*]}")]" >> "$GITHUB_OUTPUT"
+          echo "linux-json=[$(IFS=,; echo "${LINUX[*]}")]" >> "$GITHUB_OUTPUT"
+
+          ALL=("${MACOS[@]}" "${WINDOWS[@]}" "${LINUX[@]}")
+          echo "all-json=[$(IFS=,; echo "${ALL[*]}")]" >> "$GITHUB_OUTPUT"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  # ─── Build ───────────────────────────────────────────────────────
+  build-rust:
+    needs: prepare
+    if: inputs.project-type == 'rust'
+    uses: ./.github/workflows/build-rust.yml
+    with:
+      binary-name: ${{ inputs.binary-name }}
+      targets: ${{ inputs.targets }}
+      _target-matrix: ${{ needs.prepare.outputs.target-matrix }}
+
+  build-node:
+    needs: prepare
+    if: inputs.project-type == 'node'
+    uses: ./.github/workflows/build-node.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      node-version: ${{ inputs.node-version }}
+
+  # ─── Sign ────────────────────────────────────────────────────────
+  sign-windows:
+    needs: [prepare, build-rust]
+    if: always() && needs.build-rust.result == 'success' && needs.prepare.outputs.has-windows-targets == 'true'
+    uses: ./.github/workflows/sign-windows.yml
+    with:
+      binary-name: ${{ inputs.binary-name }}
+      targets: ${{ needs.prepare.outputs.windows-targets-json }}
+    secrets: inherit
+
+  sign-macos:
+    needs: [prepare, build-rust]
+    if: always() && needs.build-rust.result == 'success' && needs.prepare.outputs.has-macos-targets == 'true'
+    uses: ./.github/workflows/sign-macos.yml
+    with:
+      binary-name: ${{ inputs.binary-name }}
+      targets: ${{ needs.prepare.outputs.macos-targets-json }}
+      bundle-id: ${{ inputs.bundle-id }}
+    secrets: inherit
+
+  # ─── Release ─────────────────────────────────────────────────────
+  release:
+    needs: [prepare, build-rust, sign-windows, sign-macos]
+    if: |
+      always() &&
+      needs.build-rust.result == 'success' &&
+      (needs.sign-windows.result == 'success' || needs.sign-windows.result == 'skipped') &&
+      (needs.sign-macos.result == 'success' || needs.sign-macos.result == 'skipped')
+    uses: ./.github/workflows/release-github.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      binary-name: ${{ inputs.binary-name }}
+      version: ${{ needs.prepare.outputs.version }}
+      targets: ${{ needs.prepare.outputs.all-targets-json }}
+    permissions:
+      contents: write
+
+  # ─── Publish: cargo / npm ────────────────────────────────────────
+  publish-cargo:
+    needs: [prepare, release]
+    if: inputs.project-type == 'rust' && needs.release.result == 'success'
+    uses: ./.github/workflows/publish-cargo.yml
+    secrets: inherit
+
+  publish-npm:
+    needs: [prepare, release]
+    if: inputs.project-type == 'node' && needs.release.result == 'success'
+    uses: ./.github/workflows/publish-npm.yml
+    secrets: inherit
+
+  # ─── Publish: Homebrew ───────────────────────────────────────────
+  publish-homebrew:
+    needs: [prepare, release]
+    if: inputs.enable-homebrew && needs.release.result == 'success'
+    uses: ./.github/workflows/publish-homebrew.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      version: ${{ needs.prepare.outputs.version }}
+      targets: ${{ needs.prepare.outputs.all-targets-json }}
+    secrets: inherit
+
+  # ─── Publish: Scoop ──────────────────────────────────────────────
+  publish-scoop:
+    needs: [prepare, release]
+    if: inputs.enable-scoop && needs.release.result == 'success'
+    uses: ./.github/workflows/publish-scoop.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  # ─── Package: MSI ────────────────────────────────────────────────
+  package-msi:
+    needs: [prepare, release]
+    if: (inputs.enable-chocolatey || inputs.enable-winget) && needs.release.result == 'success'
+    uses: ./.github/workflows/package-msi.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      binary-name: ${{ inputs.binary-name }}
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  # ─── Publish: Chocolatey ─────────────────────────────────────────
+  publish-chocolatey:
+    needs: [prepare, release, package-msi]
+    if: inputs.enable-chocolatey && needs.package-msi.result == 'success'
+    uses: ./.github/workflows/publish-chocolatey.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  # ─── Publish: winget ─────────────────────────────────────────────
+  publish-winget:
+    needs: [prepare, release, package-msi]
+    if: inputs.enable-winget && needs.package-msi.result == 'success'
+    uses: ./.github/workflows/publish-winget.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  # ─── Package: DMG ────────────────────────────────────────────────
+  package-dmg:
+    needs: [prepare, sign-macos]
+    if: inputs.enable-dmg && needs.sign-macos.result == 'success'
+    uses: ./.github/workflows/package-dmg.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      binary-name: ${{ inputs.binary-name }}
+      version: ${{ needs.prepare.outputs.version }}
+      targets: ${{ needs.prepare.outputs.macos-targets-json }}
+    secrets: inherit
+
+  # ─── Package: Linux (deb/rpm/apk) ───────────────────────────────
+  package-linux:
+    needs: [prepare, release]
+    if: (inputs.enable-apt || inputs.enable-rpm || inputs.enable-apk) && needs.release.result == 'success'
+    uses: ./.github/workflows/package-linux.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      binary-name: ${{ inputs.binary-name }}
+      version: ${{ needs.prepare.outputs.version }}
+      targets: ${{ needs.prepare.outputs.linux-targets-json }}
+      enable-apt: ${{ inputs.enable-apt }}
+      enable-rpm: ${{ inputs.enable-rpm }}
+      enable-apk: ${{ inputs.enable-apk }}
+
+  # ─── Publish: apt ────────────────────────────────────────────────
+  publish-apt:
+    needs: [prepare, package-linux]
+    if: inputs.enable-apt && needs.package-linux.result == 'success'
+    uses: ./.github/workflows/publish-apt.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  # ─── Publish: rpm ────────────────────────────────────────────────
+  publish-rpm:
+    needs: [prepare, package-linux]
+    if: inputs.enable-rpm && needs.package-linux.result == 'success'
+    uses: ./.github/workflows/publish-rpm.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  # ─── Publish: AUR ────────────────────────────────────────────────
+  publish-aur:
+    needs: [prepare, release]
+    if: inputs.enable-aur && needs.release.result == 'success'
+    uses: ./.github/workflows/publish-aur.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
