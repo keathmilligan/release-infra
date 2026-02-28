@@ -1,0 +1,133 @@
+name: Package macOS DMG
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      binary-name:
+        description: Name of the binary
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+      targets:
+        description: JSON array of macOS target triples
+        required: true
+        type: string
+      bundle-id:
+        description: macOS bundle identifier
+        required: false
+        type: string
+        default: ""
+    secrets:
+      APPLE_CERT_BASE64:
+        required: true
+      APPLE_CERT_PASSWORD:
+        required: true
+      APPLE_TEAM_ID:
+        required: true
+      APPLE_ID:
+        required: true
+      APPLE_ID_PASSWORD:
+        required: true
+
+jobs:
+  dmg:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: ${{ fromJSON(inputs.targets) }}
+    steps:
+      - name: Determine architecture label
+        id: arch
+        run: |
+          if [[ "${{ matrix.target }}" == *"aarch64"* ]]; then
+            echo "label=aarch64" >> "$GITHUB_OUTPUT"
+          else
+            echo "label=x86_64" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download signed binary
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-${{ matrix.target }}
+          path: binary/
+
+      - name: Import signing certificate
+        env:
+          APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+
+          echo "$APPLE_CERT_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+      - name: Create DMG
+        run: |
+          DMG_NAME="${{ inputs.project-name }}-${{ inputs.version }}-${{ steps.arch.outputs.label }}.dmg"
+          DMG_DIR="dmg-contents"
+
+          mkdir -p "$DMG_DIR"
+          cp "binary/${{ inputs.binary-name }}" "$DMG_DIR/"
+          chmod +x "$DMG_DIR/${{ inputs.binary-name }}"
+
+          hdiutil create -volname "${{ inputs.project-name }}" \
+            -srcfolder "$DMG_DIR" \
+            -ov -format UDZO \
+            "$DMG_NAME"
+
+      - name: Codesign DMG
+        run: |
+          DMG_NAME="${{ inputs.project-name }}-${{ inputs.version }}-${{ steps.arch.outputs.label }}.dmg"
+          codesign --force --sign "Developer ID Application" \
+            --timestamp "$DMG_NAME"
+
+      - name: Notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG_NAME="${{ inputs.project-name }}-${{ inputs.version }}-${{ steps.arch.outputs.label }}.dmg"
+
+          xcrun notarytool submit "$DMG_NAME" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+          xcrun stapler staple "$DMG_NAME"
+
+      - name: Upload DMG to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          files: ${{ inputs.project-name }}-${{ inputs.version }}-${{ steps.arch.outputs.label }}.dmg
+          fail_on_unmatched_files: true
+
+      - name: Compute and append SHA256
+        run: |
+          DMG_NAME="${{ inputs.project-name }}-${{ inputs.version }}-${{ steps.arch.outputs.label }}.dmg"
+          sha256sum "$DMG_NAME" >> SHA256SUMS_DMG
+          echo "DMG SHA256: $(cat SHA256SUMS_DMG)"
+
+      - name: Upload SHA256 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sha256-dmg-${{ steps.arch.outputs.label }}
+          path: SHA256SUMS_DMG
+          retention-days: 1
