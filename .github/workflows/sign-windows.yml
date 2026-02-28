@@ -1,0 +1,61 @@
+name: Sign Windows Binaries
+
+on:
+  workflow_call:
+    inputs:
+      binary-name:
+        description: Name of the binary (without .exe)
+        required: true
+        type: string
+      targets:
+        description: Comma-separated list of Windows target triples to sign
+        required: true
+        type: string
+    secrets:
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_CLIENT_SECRET:
+        required: true
+      AZURE_CODE_SIGNING_ACCOUNT:
+        required: true
+      AZURE_CERT_PROFILE:
+        required: true
+
+jobs:
+  sign:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target: ${{ fromJSON(inputs.targets) }}
+    steps:
+      - name: Download unsigned binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: unsigned/
+
+      - name: Install AzureSignTool
+        run: dotnet tool install --global AzureSignTool
+
+      - name: Sign binary
+        run: |
+          AzureSignTool sign `
+            --azure-key-vault-url "https://${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}.vault.azure.net" `
+            --azure-key-vault-tenant-id "${{ secrets.AZURE_TENANT_ID }}" `
+            --azure-key-vault-client-id "${{ secrets.AZURE_CLIENT_ID }}" `
+            --azure-key-vault-client-secret "${{ secrets.AZURE_CLIENT_SECRET }}" `
+            --azure-key-vault-certificate "${{ secrets.AZURE_CERT_PROFILE }}" `
+            --timestamp-rfc3161 "http://timestamp.digicert.com" `
+            --timestamp-digest sha256 `
+            --file-digest sha256 `
+            "unsigned/${{ inputs.binary-name }}.exe"
+
+      - name: Upload signed binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.target }}
+          path: unsigned/${{ inputs.binary-name }}.exe
+          if-no-files-found: error
+          retention-days: 1
