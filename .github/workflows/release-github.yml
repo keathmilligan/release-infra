@@ -1,0 +1,85 @@
+name: Create GitHub Release
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      binary-name:
+        description: Name of the binary
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+      targets:
+        description: JSON array of all target triples that were built
+        required: true
+        type: string
+    outputs:
+      release-url:
+        description: URL of the created GitHub Release
+        value: ${{ jobs.release.outputs.release-url }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release-url: ${{ steps.create-release.outputs.url }}
+    steps:
+      - name: Download all signed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: signed-*
+          path: artifacts/
+
+      - name: Download unsigned Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*linux*
+          path: artifacts/
+          merge-multiple: false
+
+      - name: Create platform archives
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          for target_dir in artifacts/signed-* artifacts/binary-*; do
+            [ -d "$target_dir" ] || continue
+            target=$(basename "$target_dir" | sed 's/^signed-//' | sed 's/^binary-//')
+
+            # Skip if we already have a signed version
+            if [[ "$target_dir" == artifacts/binary-* ]] && [ -d "artifacts/signed-$target" ]; then
+              continue
+            fi
+
+            if [[ "$target" == *"windows"* ]]; then
+              # ZIP for Windows
+              archive="${{ inputs.project-name }}-${{ inputs.version }}-${target}.zip"
+              (cd "$target_dir" && zip -r "../../release-assets/$archive" .)\n            else
+              # tar.gz for Unix
+              archive="${{ inputs.project-name }}-${{ inputs.version }}-${target}.tar.gz"
+              tar -czf "release-assets/$archive" -C "$target_dir" .
+            fi
+          done
+
+      - name: Compute SHA256 checksums
+        working-directory: release-assets
+        run: |
+          sha256sum * > SHA256SUMS
+
+      - name: Create GitHub Release
+        id: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: ${{ inputs.project-name }} v${{ inputs.version }}
+          draft: false
+          prerelease: false
+          files: release-assets/*
+          fail_on_unmatched_files: true
