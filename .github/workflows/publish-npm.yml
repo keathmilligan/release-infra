@@ -1,0 +1,49 @@
+name: Publish to npm
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: false
+        type: string
+        default: "20"
+      package-manager:
+        required: false
+        type: string
+        default: "npm"
+    secrets:
+      NPM_TOKEN:
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          registry-url: https://registry.npmjs.org/
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: node-build-*
+          path: dist/
+          merge-multiple: true
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          npm publish --access public 2>&1 || {
+            EXIT_CODE=$?
+            if npm publish --access public 2>&1 | grep -q 'previously published'; then
+              echo "::warning::Package version already published to npm (non-fatal)"
+              exit 0
+            fi
+            exit $EXIT_CODE
+          }

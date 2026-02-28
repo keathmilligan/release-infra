@@ -1,0 +1,72 @@
+# Installer script for {{PROJECT_NAME}}
+# Usage: irm https://install.keathmilligan.dev/{{PROJECT_NAME}}/install.ps1 | iex
+
+$ErrorActionPreference = 'Stop'
+
+$Project = '{{PROJECT_NAME}}'
+$Binary = '{{BINARY_NAME}}'
+$Repo = '{{GITHUB_REPO}}'
+$InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR } else { Join-Path $HOME '.local' 'bin' }
+
+# Parse version from args if provided
+$Version = $args | Where-Object { $_ -match '^\d+\.\d+\.\d+' } | Select-Object -First 1
+
+# Detect architecture
+$Arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') {
+    'aarch64'
+} else {
+    'x86_64'
+}
+
+$Target = "$Arch-pc-windows-msvc"
+
+# Determine version
+if (-not $Version) {
+    $Release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
+    $Version = $Release.tag_name -replace '^v', ''
+}
+
+$Archive = "$Project-$Version-$Target.zip"
+$Url = "https://github.com/$Repo/releases/download/v$Version/$Archive"
+$ShaUrl = "https://github.com/$Repo/releases/download/v$Version/SHA256SUMS"
+
+Write-Host "Installing $Project v$Version for $Target..."
+
+# Create temp directory
+$TmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToString())
+New-Item -ItemType Directory -Path $TmpDir | Out-Null
+
+try {
+    # Download archive and checksums
+    Write-Host "Downloading $Url..."
+    Invoke-WebRequest -Uri $Url -OutFile (Join-Path $TmpDir $Archive)
+    Invoke-WebRequest -Uri $ShaUrl -OutFile (Join-Path $TmpDir 'SHA256SUMS')
+
+    # Verify checksum
+    Write-Host 'Verifying checksum...'
+    $Expected = (Get-Content (Join-Path $TmpDir 'SHA256SUMS') | Where-Object { $_ -match $Archive }) -split '\s+' | Select-Object -First 1
+    $Actual = (Get-FileHash (Join-Path $TmpDir $Archive) -Algorithm SHA256).Hash.ToLower()
+
+    if ($Expected -ne $Actual) {
+        Write-Error "Checksum verification failed!`nExpected: $Expected`nGot:      $Actual"
+        Remove-Item (Join-Path $TmpDir $Archive) -Force
+        exit 1
+    }
+    Write-Host 'Checksum verified.'
+
+    # Extract and install
+    Expand-Archive -Path (Join-Path $TmpDir $Archive) -DestinationPath $TmpDir -Force
+    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+    Copy-Item (Join-Path $TmpDir "$Binary.exe") (Join-Path $InstallDir "$Binary.exe") -Force
+
+    Write-Host "Installed $Binary.exe to $InstallDir"
+
+    # Check if install dir is in PATH
+    if ($env:PATH -notlike "*$InstallDir*") {
+        Write-Host "`nNote: $InstallDir is not in your PATH."
+        Write-Host "Add it with: `$env:PATH += `";$InstallDir`""
+        Write-Host "Or permanently: [Environment]::SetEnvironmentVariable('PATH', `$env:PATH + ';$InstallDir', 'User')"
+    }
+} finally {
+    Remove-Item -Recurse -Force $TmpDir -ErrorAction SilentlyContinue
+}
