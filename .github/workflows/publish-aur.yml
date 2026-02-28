@@ -69,7 +69,7 @@ jobs:
             cp dist/PKGBUILD PKGBUILD
           else
             cat > PKGBUILD << 'PKGEOF'
-          # Maintainer: Keath Milligan <keath@keathmilligan.net>
+          # Maintainer: ${{ vars.MAINTAINER_NAME }} <${{ vars.MAINTAINER_EMAIL }}>
           pkgname=${{ inputs.project-name }}-bin
           pkgver=${{ inputs.version }}
           pkgrel=1
@@ -102,7 +102,7 @@ jobs:
         with:
           pkgname: ${{ inputs.project-name }}-bin
           pkgbuild: PKGBUILD
-          commit_username: keathmilligan
-          commit_email: keath@keathmilligan.net
+          commit_username: ${{ vars.AUR_USERNAME }}
+          commit_email: ${{ vars.MAINTAINER_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: "Update to ${{ inputs.version }}"

@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       winget-id:
-        description: winget package identifier (e.g., keathmilligan.unfk)
+        description: winget package identifier (e.g., publisher.project)
         required: false
         type: string
         default: ""
@@ -31,7 +31,7 @@ jobs:
       - name: Determine winget ID
         id: id
         run: |
-          $id = if ('${{ inputs.winget-id }}') { '${{ inputs.winget-id }}' } else { "keathmilligan.${{ inputs.project-name }}" }
+          $id = if ('${{ inputs.winget-id }}') { '${{ inputs.winget-id }}' } else { "${{ vars.WINGET_ID_PREFIX }}.${{ inputs.project-name }}" }
           echo "winget-id=$id" >> $env:GITHUB_OUTPUT
 
       - name: Submit manifest

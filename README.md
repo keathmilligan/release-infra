@@ -6,6 +6,19 @@ Shared reusable GitHub Actions workflows for cross-platform building, signing, a
 
 A tag push (`v*`) on any adopting repository triggers a complete build-sign-package-publish pipeline. Each distribution channel is independent and opt-in.
 
+## Required Variables
+
+Set these as **GitHub Actions repository variables** (Settings > Secrets and variables > Actions > Variables) on each adopting repository, or as **organization variables** to share across repos:
+
+| Variable | Description | Example |
+|----------|-------------|--------|
+| `PACKAGES_DOMAIN` | Domain for self-hosted apt/rpm repos | `packages.example.com` |
+| `INSTALL_DOMAIN` | Domain for installer script hosting | `install.example.com` |
+| `MAINTAINER_NAME` | Maintainer display name | `Jane Doe` |
+| `MAINTAINER_EMAIL` | Maintainer email address | `jane@example.com` |
+| `AUR_USERNAME` | AUR commit username | `janedoe` |
+| `WINGET_ID_PREFIX` | winget package ID prefix | `JaneDoe` |
+
 ## Workflows
 
 | Workflow | Purpose |
@@ -62,7 +75,7 @@ jobs:
       project-name: myproject
       binary-name: myproject
       project-type: rust        # or "node"
-      bundle-id: dev.keathmilligan.myproject
+      bundle-id: dev.example.myproject
       targets: >-
         x86_64-apple-darwin,
         aarch64-apple-darwin,
@@ -81,7 +94,11 @@ jobs:
     secrets: inherit
 ```
 
-### 2. Add packaging configs (`dist/` directory)
+### 2. Set repository variables
+
+Configure the variables listed in the **Required Variables** section above on your repository (or organization).
+
+### 3. Add packaging configs (`dist/` directory)
 
 Only needed for channels you enable:
 
@@ -98,7 +115,7 @@ dist/
     └── main.wxs
 ```
 
-### 3. Configure secrets
+### 4. Configure secrets
 
 Required secrets depend on enabled features:
 
@@ -123,7 +140,7 @@ Required secrets depend on enabled features:
 | `PACKAGES_REPO_TOKEN` | apt/rpm |
 | `AUR_SSH_PRIVATE_KEY` | AUR |
 
-### 4. Release
+### 5. Release
 
 ```bash
 git tag v1.0.0
@@ -152,6 +169,8 @@ The pipeline handles everything from there.
 
 ## User Install Instructions
 
+Replace `$PACKAGES_DOMAIN` and `$INSTALL_DOMAIN` below with your configured variable values.
+
 ### Homebrew (macOS/Linux)
 ```bash
 brew tap keathmilligan/tap
@@ -171,15 +190,15 @@ choco install <project>
 
 ### apt (Debian/Ubuntu)
 ```bash
-curl -fsSL https://packages.keathmilligan.dev/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/keathmilligan.gpg
-echo "deb [signed-by=/etc/apt/keyrings/keathmilligan.gpg] https://packages.keathmilligan.dev/apt stable main" | sudo tee /etc/apt/sources.list.d/keathmilligan.list
+curl -fsSL https://$PACKAGES_DOMAIN/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/packages.gpg
+echo "deb [signed-by=/etc/apt/keyrings/packages.gpg] https://$PACKAGES_DOMAIN/apt stable main" | sudo tee /etc/apt/sources.list.d/packages.list
 sudo apt update
 sudo apt install <project>
 ```
 
 ### rpm (Fedora/RHEL/CentOS)
 ```bash
-sudo curl -o /etc/yum.repos.d/keathmilligan.repo https://packages.keathmilligan.dev/rpm/keathmilligan.repo
+sudo curl -o /etc/yum.repos.d/packages.repo https://$PACKAGES_DOMAIN/rpm/packages.repo
 sudo dnf install <project>
 ```
 
@@ -190,12 +209,12 @@ yay -S <project>-bin
 
 ### Shell installer (macOS/Linux)
 ```bash
-curl -fsSL https://install.keathmilligan.dev/<project>/install.sh | sh
+curl -fsSL https://$INSTALL_DOMAIN/<project>/install.sh | sh
 ```
 
 ### PowerShell installer (Windows)
 ```powershell
-irm https://install.keathmilligan.dev/<project>/install.ps1 | iex
+irm https://$INSTALL_DOMAIN/<project>/install.ps1 | iex
 ```
 
 ### cargo
