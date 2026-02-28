@@ -1,0 +1,61 @@
+name: Build Node
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      node-version:
+        description: Node.js version to use
+        required: false
+        type: string
+        default: "20"
+      build-command:
+        description: Build command to run
+        required: false
+        type: string
+        default: "npm run build"
+      package-manager:
+        description: Package manager (npm, pnpm, yarn)
+        required: false
+        type: string
+        default: "npm"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+
+      - name: Setup pnpm
+        if: inputs.package-manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: |
+          if [ "${{ inputs.package-manager }}" = "pnpm" ]; then
+            pnpm install --frozen-lockfile
+          elif [ "${{ inputs.package-manager }}" = "yarn" ]; then
+            yarn install --frozen-lockfile
+          else
+            npm ci
+          fi
+
+      - name: Build
+        run: ${{ inputs.build-command }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-build-${{ inputs.project-name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 1
