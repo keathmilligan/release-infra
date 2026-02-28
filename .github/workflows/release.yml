@@ -30,6 +30,23 @@ on:
         required: false
         type: string
         default: "20"
+      # ─── Distribution repo references ──────────────────────────────
+      tap-repo:
+        description: Homebrew tap repository (owner/repo)
+        required: false
+        type: string
+        default: ""
+      bucket-repo:
+        description: Scoop bucket repository (owner/repo)
+        required: false
+        type: string
+        default: ""
+      packages-repo:
+        description: Packages repository for apt/rpm (owner/repo)
+        required: false
+        type: string
+        default: ""
+      # ─── Enable flags ──────────────────────────────────────────────
       enable-homebrew:
         required: false
         type: boolean
@@ -219,6 +236,7 @@ jobs:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
       targets: ${{ needs.prepare.outputs.all-targets-json }}
+      tap-repo: ${{ inputs.tap-repo }}
     secrets: inherit
 
   # ─── Publish: Scoop ──────────────────────────────────────────────
@@ -229,6 +247,7 @@ jobs:
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
+      bucket-repo: ${{ inputs.bucket-repo }}
     secrets: inherit
 
   # ─── Package: MSI ────────────────────────────────────────────────
@@ -296,6 +315,7 @@ jobs:
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
+      packages-repo: ${{ inputs.packages-repo }}
     secrets: inherit
 
   # ─── Publish: rpm ────────────────────────────────────────────────
@@ -306,6 +326,7 @@ jobs:
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
+      packages-repo: ${{ inputs.packages-repo }}
     secrets: inherit
 
   # ─── Publish: AUR ────────────────────────────────────────────────
