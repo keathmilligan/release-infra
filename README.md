@@ -70,12 +70,12 @@ on:
 
 jobs:
   release:
-    uses: keathmilligan/release-infra/.github/workflows/release.yml@v1
+    uses: <your-org>/release-infra/.github/workflows/release.yml@v1
     with:
       project-name: myproject
       binary-name: myproject
       project-type: rust        # or "node"
-      bundle-id: dev.example.myproject
+      bundle-id: com.example.myproject
       targets: >-
         x86_64-apple-darwin,
         aarch64-apple-darwin,
@@ -169,17 +169,17 @@ The pipeline handles everything from there.
 
 ## User Install Instructions
 
-Replace `$PACKAGES_DOMAIN` and `$INSTALL_DOMAIN` below with your configured variable values.
+Replace `<packages-domain>`, `<install-domain>`, `<your-org>`, and `<project>` below with your configured values.
 
 ### Homebrew (macOS/Linux)
 ```bash
-brew tap keathmilligan/tap
-brew install keathmilligan/tap/<project>
+brew tap <your-org>/tap
+brew install <your-org>/tap/<project>
 ```
 
 ### Scoop (Windows)
 ```powershell
-scoop bucket add keathmilligan https://github.com/keathmilligan/scoop-bucket
+scoop bucket add <your-org> https://github.com/<your-org>/scoop-bucket
 scoop install <project>
 ```
 
@@ -190,15 +190,15 @@ choco install <project>
 
 ### apt (Debian/Ubuntu)
 ```bash
-curl -fsSL https://$PACKAGES_DOMAIN/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/packages.gpg
-echo "deb [signed-by=/etc/apt/keyrings/packages.gpg] https://$PACKAGES_DOMAIN/apt stable main" | sudo tee /etc/apt/sources.list.d/packages.list
+curl -fsSL https://<packages-domain>/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/packages.gpg
+echo "deb [signed-by=/etc/apt/keyrings/packages.gpg] https://<packages-domain>/apt stable main" | sudo tee /etc/apt/sources.list.d/packages.list
 sudo apt update
 sudo apt install <project>
 ```
 
 ### rpm (Fedora/RHEL/CentOS)
 ```bash
-sudo curl -o /etc/yum.repos.d/packages.repo https://$PACKAGES_DOMAIN/rpm/packages.repo
+sudo curl -o /etc/yum.repos.d/packages.repo https://<packages-domain>/rpm/packages.repo
 sudo dnf install <project>
 ```
 
@@ -209,12 +209,12 @@ yay -S <project>-bin
 
 ### Shell installer (macOS/Linux)
 ```bash
-curl -fsSL https://$INSTALL_DOMAIN/<project>/install.sh | sh
+curl -fsSL https://<install-domain>/<project>/install.sh | sh
 ```
 
 ### PowerShell installer (Windows)
 ```powershell
-irm https://$INSTALL_DOMAIN/<project>/install.ps1 | iex
+irm https://<install-domain>/<project>/install.ps1 | iex
 ```
 
 ### cargo

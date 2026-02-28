@@ -12,10 +12,9 @@ on:
         required: true
         type: string
       packages-repo:
-        description: Packages repository (owner/repo)
-        required: false
+        description: Packages repository (owner/repo) that hosts the apt/rpm repos via GitHub Pages
+        required: true
         type: string
-        default: "keathmilligan/packages"
     secrets:
       PACKAGES_REPO_TOKEN:
         required: true

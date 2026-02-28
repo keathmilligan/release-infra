@@ -33,9 +33,8 @@ on:
         default: "MIT"
       bucket-repo:
         description: Scoop bucket repository (owner/repo)
-        required: false
+        required: true
         type: string
-        default: "keathmilligan/scoop-bucket"
     secrets:
       SCOOP_BUCKET_TOKEN:
         required: true

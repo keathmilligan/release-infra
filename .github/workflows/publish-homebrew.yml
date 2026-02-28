@@ -37,9 +37,8 @@ on:
         default: "MIT"
       tap-repo:
         description: Homebrew tap repository (owner/repo)
-        required: false
+        required: true
         type: string
-        default: "keathmilligan/homebrew-tap"
     secrets:
       HOMEBREW_TAP_TOKEN:
         required: true
