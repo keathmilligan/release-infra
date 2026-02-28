@@ -1,0 +1,97 @@
+name: Sign macOS Binaries
+
+on:
+  workflow_call:
+    inputs:
+      binary-name:
+        description: Name of the binary
+        required: true
+        type: string
+      targets:
+        description: JSON array of macOS target triples to sign
+        required: true
+        type: string
+      bundle-id:
+        description: macOS bundle identifier for notarization
+        required: true
+        type: string
+    secrets:
+      APPLE_CERT_BASE64:
+        required: true
+        description: Base64-encoded .p12 Developer ID Application certificate
+      APPLE_CERT_PASSWORD:
+        required: true
+      APPLE_TEAM_ID:
+        required: true
+      APPLE_ID:
+        required: true
+        description: Apple ID email for notarytool
+      APPLE_ID_PASSWORD:
+        required: true
+        description: App-specific password for notarytool
+
+jobs:
+  sign:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: ${{ fromJSON(inputs.targets) }}
+    steps:
+      - name: Download unsigned binary
+        uses: actions/download-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: unsigned/
+
+      - name: Import signing certificate
+        env:
+          APPLE_CERT_BASE64: ${{ secrets.APPLE_CERT_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+
+          echo "$APPLE_CERT_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+
+      - name: Codesign binary
+        run: |
+          chmod +x "unsigned/${{ inputs.binary-name }}"
+          codesign --force --options runtime \
+            --sign "Developer ID Application" \
+            --timestamp \
+            "unsigned/${{ inputs.binary-name }}"
+
+      - name: Create ZIP for notarization
+        run: |
+          cd unsigned
+          zip "../${{ inputs.binary-name }}-${{ matrix.target }}.zip" "${{ inputs.binary-name }}"
+          cd ..
+
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcrun notarytool submit \
+            "${{ inputs.binary-name }}-${{ matrix.target }}.zip" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+
+      - name: Upload signed binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.target }}
+          path: unsigned/${{ inputs.binary-name }}
+          if-no-files-found: error
+          retention-days: 1
