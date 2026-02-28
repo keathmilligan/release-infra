@@ -69,23 +69,24 @@ Only set up the services for the channels you plan to enable. The core build and
 ### 1. Windows Code Signing (Azure Trusted Signing)
 
 **Required for:** `sign-windows.yml`, `package-msi.yml`
-**Cost:** Azure pay-as-you-go + code signing certificate ($200–500+/year)
+**Cost:** Azure pay-as-you-go (Trusted Signing ~$9.99/month for the Basic SKU). No separate certificate purchase is required — Azure Trusted Signing is a managed service that provides the signing certificate.
 
 #### Create an Azure account and subscription
 
 1. Sign up at [portal.azure.com](https://portal.azure.com).
 2. Create a subscription (pay-as-you-go is fine).
 
-#### Set up Azure Key Vault
+#### Create a Trusted Signing account
 
-1. In the Azure Portal, create an **Azure Key Vault** resource.
-2. Note the vault name (e.g., `my-signing-vault`). This becomes `AZURE_CODE_SIGNING_ACCOUNT`.
+1. In the Azure Portal, search for **Trusted Signing** and create a new account.
+2. Note the **account name** (e.g., `my-signing-account`). This becomes `AZURE_CODE_SIGNING_ACCOUNT`.
 
-#### Obtain a code signing certificate
+#### Create a certificate profile
 
-1. Purchase a code signing certificate from a trusted CA (DigiCert, Sectigo, GlobalSign, etc.). An EV certificate provides SmartScreen reputation from day one; standard certificates work but may trigger SmartScreen warnings initially.
-2. Import the certificate into your Azure Key Vault under **Certificates**.
-3. Note the certificate name. This becomes `AZURE_CERT_PROFILE`.
+1. In your Trusted Signing account, go to **Certificate profiles** and create a new profile.
+2. Choose the appropriate profile type (e.g., **Public Trust** for code that will be distributed publicly).
+3. Complete identity validation as prompted.
+4. Note the **certificate profile name** — this is `AZURE_CERT_PROFILE`.
 
 #### Register an Azure AD application
 
@@ -93,9 +94,7 @@ Only set up the services for the channels you plan to enable. The core build and
 2. Name it (e.g., `GitHub Actions Code Signing`), register it.
 3. Copy the **Application (client) ID** — this is `AZURE_CLIENT_ID`.
 4. Go to **Certificates & secrets** > **New client secret**. Copy the secret value immediately (shown only once) — this is `AZURE_CLIENT_SECRET`.
-5. Go to your Key Vault > **Access policies**. Add a policy granting the app registration:
-   - **Key permissions:** Sign
-   - **Certificate permissions:** Get
+5. Go to your Trusted Signing account > **Access control (IAM)**. Add a role assignment granting the app registration the **Trusted Signing Certificate Profile Signer** role.
 
 #### Get your tenant ID
 
@@ -109,8 +108,8 @@ Only set up the services for the channels you plan to enable. The core build and
 | `AZURE_TENANT_ID` | Azure AD tenant (directory) ID |
 | `AZURE_CLIENT_ID` | App registration application (client) ID |
 | `AZURE_CLIENT_SECRET` | App registration client secret value |
-| `AZURE_CODE_SIGNING_ACCOUNT` | Key Vault name |
-| `AZURE_CERT_PROFILE` | Certificate name in Key Vault |
+| `AZURE_CODE_SIGNING_ACCOUNT` | Trusted Signing account name |
+| `AZURE_CERT_PROFILE` | Certificate profile name in Trusted Signing |
 
 ---
 
@@ -456,8 +455,8 @@ All secrets are configured on the **project repository** (or organization) and f
 | `AZURE_TENANT_ID` | Windows targets | Azure Portal > Entra ID |
 | `AZURE_CLIENT_ID` | Windows targets | Azure Portal > App registration |
 | `AZURE_CLIENT_SECRET` | Windows targets | Azure Portal > App registration > Client secrets |
-| `AZURE_CODE_SIGNING_ACCOUNT` | Windows targets | Azure Key Vault name |
-| `AZURE_CERT_PROFILE` | Windows targets | Certificate name in Key Vault |
+| `AZURE_CODE_SIGNING_ACCOUNT` | Windows targets | Azure Portal > Trusted Signing account name |
+| `AZURE_CERT_PROFILE` | Windows targets | Certificate profile name in Trusted Signing |
 | `APPLE_CERT_BASE64` | macOS targets | Exported .p12 certificate, base64-encoded |
 | `APPLE_CERT_PASSWORD` | macOS targets | Password for the .p12 export |
 | `APPLE_TEAM_ID` | macOS targets | developer.apple.com > Membership |
