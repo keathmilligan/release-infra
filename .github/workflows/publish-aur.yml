@@ -63,13 +63,14 @@ jobs:
       - name: Generate PKGBUILD
         run: |
           BINARY="${{ inputs.binary-name || inputs.project-name }}"
+          MAINTAINER="${{ vars.MAINTAINER_NAME }} <${{ vars.MAINTAINER_EMAIL }}>"
 
           # Read project PKGBUILD template if it exists, otherwise use default
           if [ -f "dist/PKGBUILD" ]; then
             cp dist/PKGBUILD PKGBUILD
           else
             cat > PKGBUILD << 'PKGEOF'
-          # Maintainer: ${{ vars.MAINTAINER_NAME }} <${{ vars.MAINTAINER_EMAIL }}>
+          # Maintainer: ${MAINTAINER}
           pkgname=${{ inputs.project-name }}-bin
           pkgver=${{ inputs.version }}
           pkgrel=1
@@ -92,7 +93,8 @@ jobs:
           PKGEOF
           fi
 
-          # Substitute version and checksums in PKGBUILD
+          # Substitute maintainer, version, and checksums in PKGBUILD
+          sed -i "s|\${MAINTAINER}|${MAINTAINER}|g" PKGBUILD
           sed -i "s/pkgver=.*/pkgver=${{ inputs.version }}/" PKGBUILD
           sed -i "s/sha256sums_x86_64=.*/sha256sums_x86_64=('${{ steps.checksums.outputs.linux-x86_64 }}')/" PKGBUILD
           sed -i "s/sha256sums_aarch64=.*/sha256sums_aarch64=('${{ steps.checksums.outputs.linux-arm64 }}')/" PKGBUILD

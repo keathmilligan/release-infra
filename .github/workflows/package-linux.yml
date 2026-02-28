@@ -73,6 +73,12 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: chmod +x "packaging/${{ inputs.binary-name }}"
 
+      - name: Substitute variables in nfpm config
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          MAINTAINER="${{ vars.MAINTAINER_NAME }} <${{ vars.MAINTAINER_EMAIL }}>"
+          sed -i "s|\${MAINTAINER}|${MAINTAINER}|g" dist/nfpm.yaml
+
       - name: Build deb package
         if: steps.check.outputs.skip != 'true' && inputs.enable-apt
         run: |
