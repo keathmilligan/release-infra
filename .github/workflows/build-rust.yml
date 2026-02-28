@@ -1,0 +1,81 @@
+name: Build Rust
+
+on:
+  workflow_call:
+    inputs:
+      binary-name:
+        description: Name of the binary to build
+        required: true
+        type: string
+      targets:
+        description: Comma-separated list of Rust target triples
+        required: true
+        type: string
+      extra-build-args:
+        description: Additional arguments to pass to cargo build
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include: ${{ fromJSON(inputs._target-matrix) }}
+    # Matrix is constructed by the orchestrator; this workflow receives it
+    # For direct invocation, targets are parsed below
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      - name: Install cross (Linux cross-compilation)
+        if: matrix.use-cross
+        run: cargo install cross --locked
+
+      - name: Build (native)
+        if: "!matrix.use-cross"
+        run: |
+          cargo build --release --target ${{ matrix.target }} ${{ inputs.extra-build-args }}
+
+      - name: Build (cross)
+        if: matrix.use-cross
+        run: |
+          cross build --release --target ${{ matrix.target }} ${{ inputs.extra-build-args }}
+
+      - name: Determine binary path
+        id: binary
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            echo "path=target/${{ matrix.target }}/release/${{ inputs.binary-name }}.exe" >> "$GITHUB_OUTPUT"
+            echo "name=${{ inputs.binary-name }}.exe" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=target/${{ matrix.target }}/release/${{ inputs.binary-name }}" >> "$GITHUB_OUTPUT"
+            echo "name=${{ inputs.binary-name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: ${{ steps.binary.outputs.path }}
+          if-no-files-found: error
+          retention-days: 1
