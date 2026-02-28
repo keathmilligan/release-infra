@@ -1,0 +1,119 @@
+name: Publish Scoop Manifest
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+      binary-name:
+        description: Name of the binary (defaults to project-name)
+        required: false
+        type: string
+        default: ""
+      description:
+        description: Project description
+        required: false
+        type: string
+        default: ""
+      homepage:
+        description: Project homepage URL
+        required: false
+        type: string
+        default: ""
+      license:
+        description: Project license
+        required: false
+        type: string
+        default: "MIT"
+      bucket-repo:
+        description: Scoop bucket repository (owner/repo)
+        required: false
+        type: string
+        default: "keathmilligan/scoop-bucket"
+    secrets:
+      SCOOP_BUCKET_TOKEN:
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download SHA256SUMS
+        run: |
+          curl -fsSL -o SHA256SUMS \
+            "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/SHA256SUMS"
+
+      - name: Extract checksums
+        id: checksums
+        run: |
+          PROJECT="${{ inputs.project-name }}"
+          VERSION="${{ inputs.version }}"
+
+          get_sha() {
+            grep "${PROJECT}-${VERSION}-${1}.zip" SHA256SUMS | awk '{print $1}' || echo ""
+          }
+
+          echo "win-x86_64=$(get_sha x86_64-pc-windows-msvc)" >> "$GITHUB_OUTPUT"
+          echo "win-arm64=$(get_sha aarch64-pc-windows-msvc)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout bucket repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.bucket-repo }}
+          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+          path: bucket-repo
+
+      - name: Generate manifest
+        run: |
+          BINARY="${{ inputs.binary-name || inputs.project-name }}"
+          cat > "bucket-repo/bucket/${{ inputs.project-name }}.json" << EOF
+          {
+            "version": "${{ inputs.version }}",
+            "description": "${{ inputs.description }}",
+            "homepage": "${{ inputs.homepage }}",
+            "license": "${{ inputs.license }}",
+            "architecture": {
+              "64bit": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip",
+                "hash": "${{ steps.checksums.outputs.win-x86_64 }}"
+              },
+              "arm64": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.zip",
+                "hash": "${{ steps.checksums.outputs.win-arm64 }}"
+              }
+            },
+            "bin": "${BINARY}.exe",
+            "checkver": {
+              "github": "https://github.com/${{ github.repository }}"
+            },
+            "autoupdate": {
+              "architecture": {
+                "64bit": {
+                  "url": "https://github.com/${{ github.repository }}/releases/download/v\$version/${{ inputs.project-name }}-\$version-x86_64-pc-windows-msvc.zip"
+                },
+                "arm64": {
+                  "url": "https://github.com/${{ github.repository }}/releases/download/v\$version/${{ inputs.project-name }}-\$version-aarch64-pc-windows-msvc.zip"
+                }
+              },
+              "hash": {
+                "url": "https://github.com/${{ github.repository }}/releases/download/v\$version/SHA256SUMS",
+                "regex": "([a-fA-F0-9]{64})\\\\s+${{ inputs.project-name }}-\$version-\$basename"
+              }
+            }
+          }
+          EOF
+
+      - name: Commit and push
+        working-directory: bucket-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "bucket/${{ inputs.project-name }}.json"
+          git commit -m "Update ${{ inputs.project-name }} to ${{ inputs.version }}"
+          git push

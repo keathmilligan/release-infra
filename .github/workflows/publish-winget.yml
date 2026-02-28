@@ -1,0 +1,45 @@
+name: Publish winget Manifest
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+      winget-id:
+        description: winget package identifier (e.g., keathmilligan.unfk)
+        required: false
+        type: string
+        default: ""
+    secrets:
+      WINGET_PAT:
+        required: true
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - name: Install wingetcreate
+        run: |
+          Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+
+      - name: Determine winget ID
+        id: id
+        run: |
+          $id = if ('${{ inputs.winget-id }}') { '${{ inputs.winget-id }}' } else { "keathmilligan.${{ inputs.project-name }}" }
+          echo "winget-id=$id" >> $env:GITHUB_OUTPUT
+
+      - name: Submit manifest
+        run: |
+          $msiUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
+          .\wingetcreate.exe update `
+            ${{ steps.id.outputs.winget-id }} `
+            --version ${{ inputs.version }} `
+            --urls $msiUrl `
+            --token ${{ secrets.WINGET_PAT }} `
+            --submit

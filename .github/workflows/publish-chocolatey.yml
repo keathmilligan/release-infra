@@ -1,0 +1,50 @@
+name: Publish Chocolatey Package
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+    secrets:
+      CHOCO_API_KEY:
+        required: true
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download MSI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: msi-${{ inputs.project-name }}
+          path: msi/
+
+      - name: Update nuspec version
+        run: |
+          $nuspec = Get-Content "dist/chocolatey/package.nuspec" -Raw
+          $nuspec = $nuspec -replace '<version>.*</version>', "<version>${{ inputs.version }}</version>"
+          Set-Content "dist/chocolatey/package.nuspec" $nuspec
+
+      - name: Update install script URLs
+        run: |
+          $msiUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
+          $install = Get-Content "dist/chocolatey/tools/chocolateyInstall.ps1" -Raw
+          $install = $install -replace '\$url\s*=.*', "`$url = '$msiUrl'"
+          Set-Content "dist/chocolatey/tools/chocolateyInstall.ps1" $install
+
+      - name: Build nupkg
+        run: |
+          choco pack "dist/chocolatey/package.nuspec" --output-directory .
+
+      - name: Push to Chocolatey
+        run: |
+          choco push *.nupkg --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCO_API_KEY }}
