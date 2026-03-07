@@ -19,6 +19,7 @@ A tag push (`v*`) on any adopting repository triggers a complete build-sign-pack
   - [8. winget](#8-winget)
   - [9. Self-Hosted apt/rpm Repositories](#9-self-hosted-aptrpm-repositories)
   - [10. AUR (Arch User Repository)](#10-aur-arch-user-repository)
+  - [11. Direct Install Scripts](#11-direct-install-scripts)
 - [Per-Project Adoption](#per-project-adoption)
 - [Secrets Reference](#secrets-reference)
 - [Variables Reference](#variables-reference)
@@ -48,6 +49,7 @@ A tag push (`v*`) on any adopting repository triggers a complete build-sign-pack
 | `publish-apt.yml` | Add deb to apt repo via dispatch |
 | `publish-rpm.yml` | Add rpm to rpm repo via dispatch |
 | `publish-aur.yml` | Update PKGBUILD, push to AUR |
+| `publish-install-scripts.yml` | Render and publish curl/PowerShell install scripts |
 
 ## Target Matrix
 
@@ -137,31 +139,39 @@ Only set up the services for the channels you plan to enable. The core build and
    ```bash
    base64 -i Certificates.p12 | pbcopy
    ```
-   The clipboard contents become `APPLE_CERT_BASE64`. The password you chose becomes `APPLE_CERT_PASSWORD`.
+   The clipboard contents become `APPLE_CERTIFICATE`. The password you chose becomes `APPLE_CERTIFICATE_PASSWORD`.
 
-#### Get your Team ID
+#### Get your signing identity string
 
-1. Log in to [developer.apple.com](https://developer.apple.com/account).
-2. Go to **Membership details**.
-3. Copy the **Team ID** (10-character alphanumeric string) — this is `APPLE_TEAM_ID`.
+The signing identity is the full certificate name visible in Keychain Access, e.g.:
 
-#### Create an app-specific password for notarization
+```
+Developer ID Application: Jane Doe (AB12CD34EF)
+```
 
-1. Go to [appleid.apple.com](https://appleid.apple.com) > **Sign-In and Security** > **App-Specific Passwords**.
-2. Generate a new password (label it e.g., `GitHub Actions Notarization`).
-3. Copy it — this is `APPLE_ID_PASSWORD`.
+This exact string (including the Team ID in parentheses) becomes `APPLE_SIGNING_IDENTITY`.
 
-> **Important:** Do not use your actual Apple ID password. `notarytool` requires an app-specific password.
+#### Create an App Store Connect API key for notarization
+
+This is the recommended notarization auth method — it does not require your Apple ID or an app-specific password.
+
+1. Log in to [App Store Connect](https://appstoreconnect.apple.com) > **Users and Access** > **Integrations** > **App Store Connect API**.
+2. Create a new key with the **Developer** role.
+3. Download the generated `.p8` file (it can only be downloaded once).
+4. Note the **Key ID** (e.g., `ABC1234567`) — this is `APPLE_API_KEY_ID`.
+5. Note the **Issuer ID** shown at the top of the API Keys page — this is `APPLE_API_ISSUER`.
+6. The contents of the downloaded `.p8` file become `APPLE_API_KEY_CONTENT`.
 
 #### Secrets to configure
 
 | Secret | Value |
 |--------|-------|
-| `APPLE_CERT_BASE64` | Base64-encoded .p12 certificate + private key |
-| `APPLE_CERT_PASSWORD` | Password used when exporting the .p12 |
-| `APPLE_TEAM_ID` | 10-character Team ID from developer.apple.com |
-| `APPLE_ID` | Apple ID email address enrolled in the Developer Program |
-| `APPLE_ID_PASSWORD` | App-specific password (not your Apple ID password) |
+| `APPLE_CERTIFICATE` | Base64-encoded .p12 certificate + private key |
+| `APPLE_CERTIFICATE_PASSWORD` | Password used when exporting the .p12 |
+| `APPLE_SIGNING_IDENTITY` | Full signing identity string, e.g. `Developer ID Application: Name (TEAMID)` |
+| `APPLE_API_ISSUER` | Issuer ID UUID from App Store Connect |
+| `APPLE_API_KEY_ID` | Key ID from App Store Connect |
+| `APPLE_API_KEY_CONTENT` | Contents of the downloaded `.p8` file |
 
 ---
 
@@ -370,6 +380,31 @@ Your project needs a `dist/PKGBUILD` file. Use `${MAINTAINER}` as the maintainer
 
 ---
 
+### 11. Direct Install Scripts
+
+**Required for:** `publish-install-scripts.yml`
+**Cost:** Free (GitHub Pages via the packages repository)
+
+Direct install scripts (`install.sh` for macOS/Linux, `install.ps1` for Windows) are rendered from the templates in `templates/` and served from the packages repository under `https://<PACKAGES_DOMAIN>/<project>/`. No separate hosting setup is required beyond the packages repository already described in [section 9](#9-self-hosted-aptrpm-repositories).
+
+#### How it works
+
+1. On release, `publish-install-scripts.yml` renders `install.sh` and `install.ps1` from the templates in this repository, substituting project-specific values.
+2. The rendered scripts are attached to the GitHub Release.
+3. A `repository_dispatch` event (`update-install-scripts`) is sent to the packages repository.
+4. The packages repository workflow downloads the scripts from the release and commits them to the `gh-pages` branch under `<project>/`.
+5. GitHub Pages serves them at `https://<PACKAGES_DOMAIN>/<project>/install.sh` and `https://<PACKAGES_DOMAIN>/<project>/install.ps1`.
+
+#### Prerequisites
+
+- The packages repository must already be configured (see [section 9](#9-self-hosted-aptrpm-repositories)).
+- The `PACKAGES_DOMAIN` variable must be set on the packages repository (e.g. `packages.keathmilligan.net`).
+- The `PACKAGES_REPO_TOKEN` secret must be configured on the project repository (same token used for apt/rpm dispatch).
+
+No additional secrets or variables are needed beyond those already required for the packages repository.
+
+---
+
 ## Per-Project Adoption
 
 ### 1. Create the caller workflow
@@ -390,7 +425,6 @@ jobs:
       project-name: myproject
       binary-name: myproject
       project-type: rust              # or "node"
-      bundle-id: com.example.myproject # macOS bundle ID (if signing macOS)
       targets: >-
         x86_64-apple-darwin,
         aarch64-apple-darwin,
@@ -409,6 +443,7 @@ jobs:
       enable-apk: false
       enable-dmg: false
       enable-aur: true
+      enable-install-scripts: true
     secrets: inherit
 ```
 
@@ -457,18 +492,19 @@ All secrets are configured on the **project repository** (or organization) and f
 | `AZURE_CLIENT_SECRET` | Windows targets | Azure Portal > App registration > Client secrets |
 | `AZURE_CODE_SIGNING_ACCOUNT` | Windows targets | Azure Portal > Trusted Signing account name |
 | `AZURE_CERT_PROFILE` | Windows targets | Certificate profile name in Trusted Signing |
-| `APPLE_CERT_BASE64` | macOS targets | Exported .p12 certificate, base64-encoded |
-| `APPLE_CERT_PASSWORD` | macOS targets | Password for the .p12 export |
-| `APPLE_TEAM_ID` | macOS targets | developer.apple.com > Membership |
-| `APPLE_ID` | macOS targets | Apple ID email address |
-| `APPLE_ID_PASSWORD` | macOS targets | App-specific password from appleid.apple.com |
+| `APPLE_CERTIFICATE` | macOS targets | Exported .p12 certificate, base64-encoded |
+| `APPLE_CERTIFICATE_PASSWORD` | macOS targets | Password for the .p12 export |
+| `APPLE_SIGNING_IDENTITY` | macOS targets | Full cert name, e.g. `Developer ID Application: Name (TEAMID)` |
+| `APPLE_API_ISSUER` | macOS targets | Issuer ID UUID from App Store Connect |
+| `APPLE_API_KEY_ID` | macOS targets | Key ID from App Store Connect |
+| `APPLE_API_KEY_CONTENT` | macOS targets | Contents of the `.p8` API key file |
 | `CARGO_REGISTRY_TOKEN` | `project-type: rust` | crates.io > Account > API Tokens |
 | `NPM_TOKEN` | `project-type: node` | npmjs.com > Account > Access Tokens |
 | `HOMEBREW_TAP_TOKEN` | `enable-homebrew` | GitHub fine-grained PAT (Contents: RW on tap repo) |
 | `SCOOP_BUCKET_TOKEN` | `enable-scoop` | GitHub fine-grained PAT (Contents: RW on bucket repo) |
 | `CHOCO_API_KEY` | `enable-chocolatey` | community.chocolatey.org > Account > API Keys |
 | `WINGET_PAT` | `enable-winget` | GitHub classic PAT with `public_repo` scope |
-| `PACKAGES_REPO_TOKEN` | `enable-apt` or `enable-rpm` | GitHub fine-grained PAT (Contents: RW, Actions: Write on packages repo) |
+| `PACKAGES_REPO_TOKEN` | `enable-apt`, `enable-rpm`, or `enable-install-scripts` | GitHub fine-grained PAT (Contents: RW, Actions: Write on packages repo) |
 | `AUR_SSH_PRIVATE_KEY` | `enable-aur` | SSH private key registered with AUR account |
 
 The **packages repository** also needs its own secrets (configured on that repo, not on the project):
@@ -484,8 +520,7 @@ Set as **GitHub Actions repository variables** (Settings > Secrets and variables
 
 | Variable | Description | Example | Used by |
 |----------|-------------|---------|---------|
-| `PACKAGES_DOMAIN` | Domain for self-hosted apt/rpm repos | `packages.example.com` | packages repo workflow |
-| `INSTALL_DOMAIN` | Domain for installer script hosting | `install.example.com` | Installer templates |
+| `PACKAGES_DOMAIN` | Domain for self-hosted apt/rpm repos and install scripts | `packages.example.com` | packages repo workflow, `publish-install-scripts.yml` |
 | `MAINTAINER_NAME` | Maintainer display name | `Jane Doe` | nfpm, PKGBUILD, AUR |
 | `MAINTAINER_EMAIL` | Maintainer email address | `jane@example.com` | nfpm, PKGBUILD, AUR |
 | `AUR_USERNAME` | AUR git commit username | `janedoe` | publish-aur.yml |
@@ -512,7 +547,7 @@ Set as **GitHub Actions repository variables** (Settings > Secrets and variables
 
 ## User Install Instructions
 
-Replace `<packages-domain>`, `<install-domain>`, `<your-org>`, and `<project>` with your configured values.
+Replace `<packages-domain>`, `<your-org>`, and `<project>` with your configured values.
 
 ### Homebrew (macOS/Linux)
 ```bash
@@ -552,12 +587,12 @@ yay -S <project>-bin
 
 ### Shell installer (macOS/Linux)
 ```bash
-curl -fsSL https://<install-domain>/<project>/install.sh | sh
+curl -fsSL https://<packages-domain>/<project>/install.sh | sh
 ```
 
 ### PowerShell installer (Windows)
 ```powershell
-irm https://<install-domain>/<project>/install.ps1 | iex
+irm https://<packages-domain>/<project>/install.ps1 | iex
 ```
 
 ### cargo

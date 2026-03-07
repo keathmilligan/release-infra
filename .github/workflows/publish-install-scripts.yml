@@ -1,0 +1,84 @@
+name: Publish Install Scripts
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      binary-name:
+        description: Name of the binary (defaults to project-name)
+        required: false
+        type: string
+        default: ""
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+      packages-repo:
+        description: Packages repository (owner/repo) that hosts install scripts via GitHub Pages
+        required: true
+        type: string
+    secrets:
+      PACKAGES_REPO_TOKEN:
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout release-infra (for templates)
+        uses: actions/checkout@v4
+        with:
+          path: release-infra
+
+      - name: Render install scripts from templates
+        env:
+          PROJECT_NAME: ${{ inputs.project-name }}
+          BINARY_NAME: ${{ inputs.binary-name || inputs.project-name }}
+          GITHUB_REPO: ${{ github.repository }}
+          PACKAGES_DOMAIN: ${{ vars.PACKAGES_DOMAIN }}
+        run: |
+          mkdir -p scripts
+
+          render() {
+            local tmpl="$1"
+            local out="$2"
+            sed \
+              -e "s|{{PROJECT_NAME}}|${PROJECT_NAME}|g" \
+              -e "s|{{BINARY_NAME}}|${BINARY_NAME}|g" \
+              -e "s|{{GITHUB_REPO}}|${GITHUB_REPO}|g" \
+              -e "s|{{PACKAGES_DOMAIN}}|${PACKAGES_DOMAIN}|g" \
+              "$tmpl" > "$out"
+          }
+
+          render release-infra/templates/install.sh.tmpl  scripts/install.sh
+          render release-infra/templates/install.ps1.tmpl scripts/install.ps1
+
+          echo "Generated scripts:"
+          ls -la scripts/
+
+      - name: Upload install scripts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          files: |
+            scripts/install.sh
+            scripts/install.ps1
+
+      - name: Trigger packages repo update
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PACKAGES_REPO_TOKEN }}
+          repository: ${{ inputs.packages-repo }}
+          event-type: update-install-scripts
+          client-payload: |
+            {
+              "project": "${{ inputs.project-name }}",
+              "version": "${{ inputs.version }}",
+              "repo": "${{ github.repository }}",
+              "run_id": "${{ github.run_id }}"
+            }

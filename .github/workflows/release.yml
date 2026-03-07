@@ -20,11 +20,6 @@ on:
         description: Comma-separated list of Rust target triples
         required: true
         type: string
-      bundle-id:
-        description: macOS bundle identifier (required for macOS signing)
-        required: false
-        type: string
-        default: ""
       node-version:
         description: Node.js version (for node projects)
         required: false
@@ -80,6 +75,10 @@ on:
         type: boolean
         default: false
       enable-aur:
+        required: false
+        type: boolean
+        default: false
+      enable-install-scripts:
         required: false
         type: boolean
         default: false
@@ -194,7 +193,6 @@ jobs:
     with:
       binary-name: ${{ inputs.binary-name }}
       targets: ${{ needs.prepare.outputs.macos-targets-json }}
-      bundle-id: ${{ inputs.bundle-id }}
     secrets: inherit
 
   # ─── Release ─────────────────────────────────────────────────────
@@ -337,4 +335,16 @@ jobs:
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
+    secrets: inherit
+
+  # ─── Publish: Install scripts ────────────────────────────────────
+  publish-install-scripts:
+    needs: [prepare, release]
+    if: inputs.enable-install-scripts && needs.release.result == 'success'
+    uses: ./.github/workflows/publish-install-scripts.yml
+    with:
+      project-name: ${{ inputs.project-name }}
+      binary-name: ${{ inputs.binary-name }}
+      version: ${{ needs.prepare.outputs.version }}
+      packages-repo: ${{ inputs.packages-repo }}
     secrets: inherit
