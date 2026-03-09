@@ -78,6 +78,10 @@ on:
         required: false
         type: boolean
         default: false
+      enable-cargo:
+        required: false
+        type: boolean
+        default: false
       enable-install-scripts:
         required: false
         type: boolean
@@ -215,7 +219,7 @@ jobs:
   # ─── Publish: cargo / npm ────────────────────────────────────────
   publish-cargo:
     needs: [prepare, release]
-    if: inputs.project-type == 'rust' && needs.release.result == 'success'
+    if: inputs.enable-cargo && needs.release.result == 'success'
     uses: ./.github/workflows/publish-cargo.yml
     secrets: inherit
 
