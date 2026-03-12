@@ -37,7 +37,7 @@ on:
         type: string
     secrets:
       SCOOP_BUCKET_TOKEN:
-        required: true
+        required: false
 
 jobs:
   publish:

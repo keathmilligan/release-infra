@@ -13,21 +13,21 @@ on:
         type: string
     secrets:
       APPLE_CERTIFICATE:
-        required: true
+        required: false
         description: Base64-encoded .p12 Developer ID Application certificate
       APPLE_CERTIFICATE_PASSWORD:
-        required: true
+        required: false
       APPLE_SIGNING_IDENTITY:
-        required: true
+        required: false
         description: 'Full signing identity string, e.g. "Developer ID Application: Name (TEAMID)"'
       APPLE_API_ISSUER:
-        required: true
+        required: false
         description: App Store Connect API key issuer UUID
       APPLE_API_KEY_ID:
-        required: true
+        required: false
         description: App Store Connect API key ID
       APPLE_API_KEY_CONTENT:
-        required: true
+        required: false
         description: App Store Connect API key .p8 file content
 
 jobs:

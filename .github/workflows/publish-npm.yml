@@ -13,7 +13,7 @@ on:
         default: "npm"
     secrets:
       NPM_TOKEN:
-        required: true
+        required: false
 
 jobs:
   publish:

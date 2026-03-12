@@ -13,15 +13,15 @@ on:
         type: string
     secrets:
       AZURE_TENANT_ID:
-        required: true
+        required: false
       AZURE_CLIENT_ID:
-        required: true
+        required: false
       AZURE_CLIENT_SECRET:
-        required: true
+        required: false
       AZURE_CODE_SIGNING_ACCOUNT:
-        required: true
+        required: false
       AZURE_CERT_PROFILE:
-        required: true
+        required: false
 
 jobs:
   sign:

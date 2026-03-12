@@ -33,7 +33,7 @@ on:
         default: "MIT"
     secrets:
       AUR_SSH_PRIVATE_KEY:
-        required: true
+        required: false
 
 jobs:
   publish:

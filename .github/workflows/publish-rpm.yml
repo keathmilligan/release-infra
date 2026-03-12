@@ -17,7 +17,7 @@ on:
         type: string
     secrets:
       PACKAGES_REPO_TOKEN:
-        required: true
+        required: false
 
 jobs:
   publish:

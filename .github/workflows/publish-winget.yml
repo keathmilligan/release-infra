@@ -18,7 +18,7 @@ on:
         default: ""
     secrets:
       WINGET_PAT:
-        required: true
+        required: false
 
 jobs:
   publish:
