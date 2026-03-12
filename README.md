@@ -81,7 +81,8 @@ Only set up the services for the channels you plan to enable. The core build and
 #### Create a Trusted Signing account
 
 1. In the Azure Portal, search for **Trusted Signing** and create a new account.
-2. Note the **account name** (e.g., `my-signing-account`). This becomes `AZURE_CODE_SIGNING_ACCOUNT`.
+2. Note the **account name** (e.g., `my-signing-account`). This becomes `AZURE_SIGNING_ACCOUNT`.
+3. Note the **regional endpoint URL** (e.g., `https://eus.codesigning.azure.net`). This becomes `AZURE_SIGNING_ENDPOINT`.
 
 #### Create a certificate profile
 
@@ -110,7 +111,8 @@ Only set up the services for the channels you plan to enable. The core build and
 | `AZURE_TENANT_ID` | Azure AD tenant (directory) ID |
 | `AZURE_CLIENT_ID` | App registration application (client) ID |
 | `AZURE_CLIENT_SECRET` | App registration client secret value |
-| `AZURE_CODE_SIGNING_ACCOUNT` | Trusted Signing account name |
+| `AZURE_SIGNING_ENDPOINT` | Regional endpoint URL (e.g., `https://eus.codesigning.azure.net`) |
+| `AZURE_SIGNING_ACCOUNT` | Trusted Signing account name |
 | `AZURE_CERT_PROFILE` | Certificate profile name in Trusted Signing |
 
 ---
@@ -490,7 +492,8 @@ All secrets are configured on the **project repository** (or organization) and f
 | `AZURE_TENANT_ID` | Windows targets | Azure Portal > Entra ID |
 | `AZURE_CLIENT_ID` | Windows targets | Azure Portal > App registration |
 | `AZURE_CLIENT_SECRET` | Windows targets | Azure Portal > App registration > Client secrets |
-| `AZURE_CODE_SIGNING_ACCOUNT` | Windows targets | Azure Portal > Trusted Signing account name |
+| `AZURE_SIGNING_ENDPOINT` | Windows targets | Azure Portal > Trusted Signing > Regional endpoint URL |
+| `AZURE_SIGNING_ACCOUNT` | Windows targets | Azure Portal > Trusted Signing account name |
 | `AZURE_CERT_PROFILE` | Windows targets | Certificate profile name in Trusted Signing |
 | `APPLE_CERTIFICATE` | macOS targets | Exported .p12 certificate, base64-encoded |
 | `APPLE_CERTIFICATE_PASSWORD` | macOS targets | Password for the .p12 export |
