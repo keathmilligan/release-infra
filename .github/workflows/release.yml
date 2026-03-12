@@ -207,6 +207,8 @@ jobs:
       needs.build-rust.result == 'success' &&
       (needs.sign-windows.result == 'success' || needs.sign-windows.result == 'skipped') &&
       (needs.sign-macos.result == 'success' || needs.sign-macos.result == 'skipped')
+    permissions:
+      contents: write
     uses: keathmilligan/release-infra/.github/workflows/release-github.yml@master
     with:
       project-name: ${{ inputs.project-name }}
