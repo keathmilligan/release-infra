@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       targets:
-        description: Comma-separated list of Windows target triples to sign
+        description: JSON array of Windows target triples to sign
         required: true
         type: string
     secrets:
@@ -18,7 +18,9 @@ on:
         required: false
       AZURE_CLIENT_SECRET:
         required: false
-      AZURE_CODE_SIGNING_ACCOUNT:
+      AZURE_SIGNING_ENDPOINT:
+        required: false
+      AZURE_SIGNING_ACCOUNT:
         required: false
       AZURE_CERT_PROFILE:
         required: false
@@ -36,21 +38,50 @@ jobs:
           name: binary-${{ matrix.target }}
           path: unsigned/
 
-      - name: Install AzureSignTool
-        run: dotnet tool install --global AzureSignTool
+      - name: Verify Azure signing secrets
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          AZURE_CERT_PROFILE: ${{ secrets.AZURE_CERT_PROFILE }}
+        run: |
+          missing=()
+          [ -z "$AZURE_CLIENT_ID" ]        && missing+=(AZURE_CLIENT_ID)
+          [ -z "$AZURE_CLIENT_SECRET" ]    && missing+=(AZURE_CLIENT_SECRET)
+          [ -z "$AZURE_TENANT_ID" ]        && missing+=(AZURE_TENANT_ID)
+          [ -z "$AZURE_SIGNING_ENDPOINT" ] && missing+=(AZURE_SIGNING_ENDPOINT)
+          [ -z "$AZURE_SIGNING_ACCOUNT" ]  && missing+=(AZURE_SIGNING_ACCOUNT)
+          [ -z "$AZURE_CERT_PROFILE" ]     && missing+=(AZURE_CERT_PROFILE)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "ERROR: Missing required Azure signing secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Install trusted-signing-cli
+        shell: pwsh
+        run: |
+          $version = "0.8.0"
+          $url = "https://github.com/Levminer/trusted-signing-cli/releases/download/$version/trusted-signing-cli.exe"
+          $dest = "$env:RUNNER_TEMP\trusted-signing-cli.exe"
+          Invoke-WebRequest -Uri $url -OutFile $dest
+          echo "$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Sign binary
-        run: |
-          AzureSignTool sign `
-            --azure-key-vault-url "https://${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}.vault.azure.net" `
-            --azure-key-vault-tenant-id "${{ secrets.AZURE_TENANT_ID }}" `
-            --azure-key-vault-client-id "${{ secrets.AZURE_CLIENT_ID }}" `
-            --azure-key-vault-client-secret "${{ secrets.AZURE_CLIENT_SECRET }}" `
-            --azure-key-vault-certificate "${{ secrets.AZURE_CERT_PROFILE }}" `
-            --timestamp-rfc3161 "http://timestamp.digicert.com" `
-            --timestamp-digest sha256 `
-            --file-digest sha256 `
-            "unsigned/${{ inputs.binary-name }}.exe"
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: >-
+          trusted-signing-cli
+          -e ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          -a ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          -c ${{ secrets.AZURE_CERT_PROFILE }}
+          -d ${{ inputs.binary-name }}
+          "unsigned/${{ inputs.binary-name }}.exe"
 
       - name: Upload signed binary
         uses: actions/upload-artifact@v4
