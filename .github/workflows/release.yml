@@ -213,8 +213,6 @@ jobs:
       binary-name: ${{ inputs.binary-name }}
       version: ${{ needs.prepare.outputs.version }}
       targets: ${{ needs.prepare.outputs.all-targets-json }}
-    permissions:
-      contents: write
 
   # ─── Publish: cargo / npm ────────────────────────────────────────
   publish-cargo:

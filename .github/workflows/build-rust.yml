@@ -16,6 +16,10 @@ on:
         required: false
         type: string
         default: ""
+      _target-matrix:
+        description: Pre-computed JSON matrix from the orchestrator
+        required: true
+        type: string
 
 jobs:
   build:

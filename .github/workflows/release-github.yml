@@ -61,7 +61,8 @@ jobs:
             if [[ "$target" == *"windows"* ]]; then
               # ZIP for Windows
               archive="${{ inputs.project-name }}-${{ inputs.version }}-${target}.zip"
-              (cd "$target_dir" && zip -r "../../release-assets/$archive" .)\n            else
+              (cd "$target_dir" && zip -r "../../release-assets/$archive" .)
+            else
               # tar.gz for Unix
               archive="${{ inputs.project-name }}-${{ inputs.version }}-${target}.tar.gz"
               tar -czf "release-assets/$archive" -C "$target_dir" .
