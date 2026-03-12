@@ -137,17 +137,17 @@ jobs:
             t=$(echo "$t" | xargs)  # trim whitespace
             if [[ "$t" == *"apple-darwin"* ]]; then
               MACOS+=("\"$t\"")
-              MATRIX=$(echo "$MATRIX" | jq --arg t "$t" '. + [{"target": $t, "runner": "macos-latest", "use-cross": false}]')
+              MATRIX=$(echo "$MATRIX" | jq -c --arg t "$t" '. + [{"target": $t, "runner": "macos-latest", "use-cross": false}]')
             elif [[ "$t" == *"windows"* ]]; then
               WINDOWS+=("\"$t\"")
-              MATRIX=$(echo "$MATRIX" | jq --arg t "$t" '. + [{"target": $t, "runner": "windows-latest", "use-cross": false}]')
+              MATRIX=$(echo "$MATRIX" | jq -c --arg t "$t" '. + [{"target": $t, "runner": "windows-latest", "use-cross": false}]')
             elif [[ "$t" == *"linux"* ]]; then
               LINUX+=("\"$t\"")
               USE_CROSS="false"
               if [[ "$t" == *"aarch64"* ]] || [[ "$t" == *"musl"* ]]; then
                 USE_CROSS="true"
               fi
-              MATRIX=$(echo "$MATRIX" | jq --arg t "$t" --argjson cross "$USE_CROSS" '. + [{"target": $t, "runner": "ubuntu-latest", "use-cross": $cross}]')
+              MATRIX=$(echo "$MATRIX" | jq -c --arg t "$t" --argjson cross "$USE_CROSS" '. + [{"target": $t, "runner": "ubuntu-latest", "use-cross": $cross}]')
             fi
           done
 
