@@ -33,6 +33,7 @@ jobs:
       - name: Checkout release-infra (for templates)
         uses: actions/checkout@v4
         with:
+          repository: keathmilligan/release-infra
           path: release-infra
 
       - name: Render install scripts from templates
