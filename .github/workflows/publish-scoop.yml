@@ -108,11 +108,26 @@ jobs:
           }
           EOF
 
+      - name: Check if update is needed
+        id: check
+        working-directory: bucket-repo
+        run: |
+          if [ -f "bucket/${{ inputs.project-name }}.json" ]; then
+            CURRENT_VERSION=$(jq -r '.version' "bucket/${{ inputs.project-name }}.json")
+            if [ "$CURRENT_VERSION" = "${{ inputs.version }}" ]; then
+              echo "Manifest already at version ${{ inputs.version }}, skipping update"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
       - name: Commit and push
+        if: steps.check.outputs.skip != 'true'
         working-directory: bucket-repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "bucket/${{ inputs.project-name }}.json"
-          git commit -m "Update ${{ inputs.project-name }} to ${{ inputs.version }}"
-          git push
+          git commit -m "Update ${{ inputs.project-name }} to ${{ inputs.version }}" || echo "Nothing to commit"
+          git push || echo "Nothing to push"

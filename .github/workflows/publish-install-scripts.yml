@@ -20,6 +20,11 @@ on:
         description: Packages repository (owner/repo) that hosts install scripts via GitHub Pages
         required: true
         type: string
+      templates-repo:
+        description: Repository containing install script templates (owner/repo)
+        required: false
+        type: string
+        default: "keathmilligan/release-infra"
     secrets:
       PACKAGES_REPO_TOKEN:
         required: false
@@ -33,7 +38,7 @@ jobs:
       - name: Checkout release-infra (for templates)
         uses: actions/checkout@v4
         with:
-          repository: keathmilligan/release-infra
+          repository: ${{ inputs.templates-repo }}
           path: release-infra
 
       - name: Render install scripts from templates

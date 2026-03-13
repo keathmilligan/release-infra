@@ -47,4 +47,16 @@ jobs:
 
       - name: Push to Chocolatey
         run: |
-          choco push *.nupkg --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCO_API_KEY }}
+          $output = choco push *.nupkg --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCO_API_KEY }} 2>&1
+          $exitCode = $LASTEXITCODE
+          
+          # Check if version already exists (non-fatal)
+          if ($output -match 'already exists' -or $output -match 'A package with this ID and version') {
+            Write-Host "::warning::Package version already exists on Chocolatey (non-fatal)"
+            exit 0
+          }
+          
+          if ($exitCode -ne 0) {
+            Write-Error "Chocolatey push failed: $output"
+            exit $exitCode
+          }

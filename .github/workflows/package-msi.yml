@@ -22,7 +22,9 @@ on:
         required: false
       AZURE_CLIENT_SECRET:
         required: false
-      AZURE_CODE_SIGNING_ACCOUNT:
+      AZURE_SIGNING_ACCOUNT:
+        required: false
+      AZURE_SIGNING_ENDPOINT:
         required: false
       AZURE_CERT_PROFILE:
         required: false
@@ -58,7 +60,7 @@ jobs:
       - name: Sign MSI
         run: |
           AzureSignTool sign `
-            --azure-key-vault-url "https://${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}.vault.azure.net" `
+            --azure-key-vault-url "${{ secrets.AZURE_SIGNING_ENDPOINT }}" `
             --azure-key-vault-tenant-id "${{ secrets.AZURE_TENANT_ID }}" `
             --azure-key-vault-client-id "${{ secrets.AZURE_CLIENT_ID }}" `
             --azure-key-vault-client-secret "${{ secrets.AZURE_CLIENT_SECRET }}" `

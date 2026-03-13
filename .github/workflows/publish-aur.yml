@@ -99,7 +99,16 @@ jobs:
           sed -i "s/sha256sums_x86_64=.*/sha256sums_x86_64=('${{ steps.checksums.outputs.linux-x86_64 }}')/" PKGBUILD
           sed -i "s/sha256sums_aarch64=.*/sha256sums_aarch64=('${{ steps.checksums.outputs.linux-arm64 }}')/" PKGBUILD
 
+      - name: Check if update is needed
+        id: check
+        run: |
+          # Extract version from generated PKGBUILD
+          NEW_VERSION=$(grep '^pkgver=' PKGBUILD | cut -d'=' -f2)
+          echo "New version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Publish to AUR
+        if: steps.check.outputs.version != ''
         uses: KSXGitHub/github-actions-deploy-aur@v3
         with:
           pkgname: ${{ inputs.project-name }}-bin
@@ -108,3 +117,4 @@ jobs:
           commit_email: ${{ vars.MAINTAINER_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: "Update to ${{ inputs.version }}"
+        continue-on-error: true
