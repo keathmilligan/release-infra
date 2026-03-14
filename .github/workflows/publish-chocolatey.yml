@@ -22,11 +22,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download ZIP artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: zip-${{ inputs.project-name }}
-          path: zip/
+      - name: Download ZIP from GitHub release
+        run: |
+          $zipUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip"
+          New-Item -ItemType Directory -Force -Path zip | Out-Null
+          Invoke-WebRequest -Uri $zipUrl -OutFile "zip/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip"
+          
+      - name: Compute ZIP SHA256
+        id: checksum
+        run: |
+          $zipPath = "zip/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip"
+          $sha256 = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash
+          echo "sha256=$sha256" >> "$env:GITHUB_OUTPUT"
 
       - name: Update nuspec version
         run: |
@@ -34,11 +41,13 @@ jobs:
           $nuspec = $nuspec -replace '<version>.*</version>', "<version>${{ inputs.version }}</version>"
           Set-Content "dist/chocolatey/package.nuspec" $nuspec
 
-      - name: Update install script URLs
+      - name: Update install script URLs and checksum
         run: |
           $zipUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip"
+          $sha256 = "${{ steps.checksum.outputs.sha256 }}"
           $install = Get-Content "dist/chocolatey/tools/chocolateyInstall.ps1" -Raw
           $install = $install -replace '\$url\s*=.*', "`$url = '$zipUrl'"
+          $install = $install -replace '__SHA256_ZIP__', $sha256
           Set-Content "dist/chocolatey/tools/chocolateyInstall.ps1" $install
 
       - name: Build nupkg
