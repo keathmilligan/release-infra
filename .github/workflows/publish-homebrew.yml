@@ -74,13 +74,29 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
 
+      - name: Check if update is needed
+        id: check
+        working-directory: tap
+        run: |
+          if [ -f "Formula/${{ inputs.project-name }}.rb" ]; then
+            CURRENT_VERSION=$(grep -o 'version "[^"]*"' "Formula/${{ inputs.project-name }}.rb" | head -1 | grep -o '"[^"]*"' | tr -d '"')
+            if [ "$CURRENT_VERSION" = "${{ inputs.version }}" ]; then
+              echo "Formula already at version ${{ inputs.version }}, skipping update"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
       - name: Generate formula
+        if: steps.check.outputs.skip != 'true'
         run: |
           BINARY="${{ inputs.binary-name || inputs.project-name }}"
           # Convert project name to Ruby class name (PascalCase)
           CLASS_NAME=$(echo "${{ inputs.project-name }}" | sed -r 's/(^|[-_])([a-z])/\U\2/g')
 
-          cat > "tap/Formula/${{ inputs.project-name }}.rb" << 'FORMULA_EOF'
+          mkdir -p tap/Formula
+          cat > "tap/Formula/${{ inputs.project-name }}.rb" << FORMULA_EOF
           # typed: false
           # frozen_string_literal: true
 
@@ -119,20 +135,6 @@ jobs:
             end
           end
           FORMULA_EOF
-
-      - name: Check if update is needed
-        id: check
-        working-directory: tap
-        run: |
-          if [ -f "Formula/${{ inputs.project-name }}.rb" ]; then
-            CURRENT_VERSION=$(grep -o 'version "[^"]*"' "Formula/${{ inputs.project-name }}.rb" | head -1 | grep -o '"[^"]*"' | tr -d '"')
-            if [ "$CURRENT_VERSION" = "${{ inputs.version }}" ]; then
-              echo "Formula already at version ${{ inputs.version }}, skipping update"
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-          echo "skip=false" >> "$GITHUB_OUTPUT"
 
       - name: Validate formula
         if: steps.check.outputs.skip != 'true'

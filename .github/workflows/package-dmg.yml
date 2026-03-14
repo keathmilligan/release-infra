@@ -40,6 +40,8 @@ on:
 jobs:
   dmg:
     runs-on: macos-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         target: ${{ fromJSON(inputs.targets) }}

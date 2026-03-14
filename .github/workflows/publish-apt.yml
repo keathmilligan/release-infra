@@ -22,6 +22,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download deb artifacts
         uses: actions/download-artifact@v4
