@@ -255,7 +255,7 @@ jobs:
   # ─── Package: MSI ────────────────────────────────────────────────
   package-msi:
     needs: [prepare, release]
-    if: (inputs.enable-chocolatey || inputs.enable-winget) && needs.release.result == 'success'
+    if: inputs.enable-chocolatey && needs.release.result == 'success'
     uses: keathmilligan/release-infra/.github/workflows/package-msi.yml@master
     with:
       project-name: ${{ inputs.project-name }}
@@ -274,9 +274,14 @@ jobs:
     secrets: inherit
 
   # ─── Publish: winget ─────────────────────────────────────────────
+  # winget uses portable .exe installers uploaded directly to the GitHub
+  # release — no MSI required. A symlink is created automatically by winget
+  # in %LOCALAPPDATA%\Microsoft\WinGet\Links\ (user) or
+  # C:\Program Files\WinGet\Links\ (machine) using the Commands field
+  # already present in the winget-pkgs manifest.
   publish-winget:
-    needs: [prepare, release, package-msi]
-    if: inputs.enable-winget && needs.package-msi.result == 'success'
+    needs: [prepare, release]
+    if: inputs.enable-winget && needs.release.result == 'success'
     uses: keathmilligan/release-infra/.github/workflows/publish-winget.yml@master
     with:
       project-name: ${{ inputs.project-name }}

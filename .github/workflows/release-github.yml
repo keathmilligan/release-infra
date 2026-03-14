@@ -62,6 +62,11 @@ jobs:
               # ZIP for Windows
               archive="${{ inputs.project-name }}-${{ inputs.version }}-${target}.zip"
               (cd "$target_dir" && zip -r "../../release-assets/$archive" .)
+              # Also publish the standalone .exe for portable winget installs
+              exe_src=$(find "$target_dir" -maxdepth 1 -name "*.exe" | head -1)
+              if [ -n "$exe_src" ]; then
+                cp "$exe_src" "release-assets/${{ inputs.project-name }}-${{ inputs.version }}-${target}.exe"
+              fi
             else
               # tar.gz for Unix
               archive="${{ inputs.project-name }}-${{ inputs.version }}-${target}.tar.gz"

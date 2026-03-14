@@ -55,10 +55,11 @@ jobs:
       - name: Submit manifest
         if: steps.check.outputs.skip != 'true'
         run: |
-          $msiUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
+          $x64Url  = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.exe"
+          $arm64Url = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.exe"
           .\wingetcreate.exe update `
             ${{ steps.id.outputs.winget-id }} `
             --version ${{ inputs.version }} `
-            --urls $msiUrl `
+            --urls "$x64Url|x64" "$arm64Url|arm64" `
             --token ${{ secrets.WINGET_PAT }} `
             --submit
