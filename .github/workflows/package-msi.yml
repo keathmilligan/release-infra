@@ -52,11 +52,7 @@ jobs:
           path: target/release/
 
       - name: Build MSI
-        run: |
-          cargo wix --no-build --nocapture `
-            -i dist/wix/main.wxs `
-            --install-version ${{ inputs.version }} `
-            -o "${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
+        run: cargo wix --no-build --nocapture -i dist/wix/main.wxs --install-version ${{ inputs.version }} -o "${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
 
       - name: Install AzureSignTool
         run: dotnet tool install --global AzureSignTool
