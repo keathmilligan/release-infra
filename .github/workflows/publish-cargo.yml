@@ -30,11 +30,11 @@ jobs:
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             "https://crates.io/api/v1/crates/$CRATE_NAME/$CRATE_VERSION" 2>/dev/null || echo "000")
           
-          # Trim any trailing whitespace from HTTP_STATUS
-          HTTP_STATUS=$(echo "$HTTP_STATUS" | tr -d '\n\r')
+          echo "Crates.io API response status: $HTTP_STATUS"
           
-          if [ "$HTTP_STATUS" = "200" ]; then
-            echo "::warning::Version $CRATE_VERSION of $CRATE_NAME is already published on crates.io. Skipping publish."
+          # Consider any 2xx or 3xx status as "exists" (200 OK, 302 Found, etc.)
+          if [[ "$HTTP_STATUS" =~ ^[23] ]]; then
+            echo "::warning::Version $CRATE_VERSION of $CRATE_NAME already exists on crates.io (HTTP $HTTP_STATUS). Skipping publish."
             exit 0
           fi
           
