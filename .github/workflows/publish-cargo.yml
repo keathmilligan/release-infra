@@ -27,14 +27,17 @@ jobs:
           echo "Publishing $CRATE_NAME v$CRATE_VERSION"
           
           # Check if this version already exists on crates.io
+          # A User-Agent header is required by crates.io crawler policy; omitting it returns 403.
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "User-Agent: publish-cargo-workflow/1.0 (github-actions)" \
             "https://crates.io/api/v1/crates/$CRATE_NAME/$CRATE_VERSION" 2>/dev/null || echo "000")
           
           echo "Crates.io API response status: $HTTP_STATUS"
           
-          # Consider any 2xx or 3xx status as "exists" (200 OK, 302 Found, etc.)
-          if [[ "$HTTP_STATUS" =~ ^[23] ]]; then
-            echo "::warning::Version $CRATE_VERSION of $CRATE_NAME already exists on crates.io (HTTP $HTTP_STATUS). Skipping publish."
+          # 200: version exists; skip. 404: version does not exist yet; publish.
+          # Any other status (e.g. 5xx) falls through so cargo publish can surface the real error.
+          if [[ "$HTTP_STATUS" == "200" ]]; then
+            echo "::warning::Version $CRATE_VERSION of $CRATE_NAME already exists on crates.io. Skipping publish."
             exit 0
           fi
           
