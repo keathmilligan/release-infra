@@ -92,6 +92,8 @@ jobs:
         run: |
           MAINTAINER="${{ vars.MAINTAINER_NAME }} <${{ vars.MAINTAINER_EMAIL }}>"
           sed -i "s|\${MAINTAINER}|${MAINTAINER}|g" dist/nfpm.yaml
+          sed -i "s|{{VERSION}}|${{ inputs.version }}|g" dist/nfpm.yaml
+          sed -i "s|{{ARCH}}|${{ matrix.nfpm-arch }}|g" dist/nfpm.yaml
 
       - name: Build deb package
         if: steps.check.outputs.skip != 'true' && inputs.enable-apt
@@ -99,8 +101,7 @@ jobs:
           nfpm package \
             --config dist/nfpm.yaml \
             --packager deb \
-            --target "packaging/" \
-            --version "${{ inputs.version }}"
+            --target "packaging/"
 
       - name: Build rpm package
         if: steps.check.outputs.skip != 'true' && inputs.enable-rpm
@@ -108,8 +109,7 @@ jobs:
           nfpm package \
             --config dist/nfpm.yaml \
             --packager rpm \
-            --target "packaging/" \
-            --version "${{ inputs.version }}"
+            --target "packaging/"
 
       - name: Build apk package
         if: steps.check.outputs.skip != 'true' && inputs.enable-apk
@@ -117,8 +117,7 @@ jobs:
           nfpm package \
             --config dist/nfpm.yaml \
             --packager apk \
-            --target "packaging/" \
-            --version "${{ inputs.version }}"
+            --target "packaging/"
 
       - name: Upload deb artifact
         if: steps.check.outputs.skip != 'true' && inputs.enable-apt
