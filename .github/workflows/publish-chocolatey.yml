@@ -47,7 +47,8 @@ jobs:
 
       - name: Push to Chocolatey
         run: |
-          $output = choco push *.nupkg --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCO_API_KEY }} 2>&1
+          $nupkg = (Get-Item *.nupkg).FullName
+          $output = choco push $nupkg --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCO_API_KEY }} 2>&1
           $exitCode = $LASTEXITCODE
           
           # Check if version already exists (non-fatal)
