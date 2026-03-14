@@ -17,6 +17,7 @@ on:
 
 jobs:
   publish:
+    name: Publish Chocolatey
     runs-on: windows-latest
     steps:
       - name: Checkout

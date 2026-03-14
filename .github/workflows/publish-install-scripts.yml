@@ -31,6 +31,7 @@ on:
 
 jobs:
   publish:
+    name: Publish Install Scripts
     runs-on: ubuntu-latest
     permissions:
       contents: write

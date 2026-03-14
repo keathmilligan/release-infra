@@ -41,6 +41,7 @@ on:
 
 jobs:
   publish:
+    name: Publish Scoop
     runs-on: ubuntu-latest
     steps:
       - name: Download SHA256SUMS

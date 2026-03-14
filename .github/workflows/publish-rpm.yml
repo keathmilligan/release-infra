@@ -21,6 +21,7 @@ on:
 
 jobs:
   publish:
+    name: Publish rpm
     runs-on: ubuntu-latest
     permissions:
       contents: write

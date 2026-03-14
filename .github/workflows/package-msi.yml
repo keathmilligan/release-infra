@@ -31,6 +31,7 @@ on:
 
 jobs:
   build-msi:
+    name: Package MSI
     runs-on: windows-latest
     permissions:
       contents: write

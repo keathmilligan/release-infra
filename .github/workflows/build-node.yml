@@ -25,6 +25,7 @@ on:
 
 jobs:
   build:
+    name: Build Node / build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

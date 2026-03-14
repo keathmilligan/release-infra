@@ -27,6 +27,7 @@ on:
 
 jobs:
   sign:
+    name: Sign Windows / ${{ matrix.target }}
     runs-on: windows-latest
     strategy:
       matrix:

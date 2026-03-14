@@ -45,6 +45,7 @@ on:
 
 jobs:
   publish:
+    name: Publish Homebrew
     runs-on: ubuntu-latest
     steps:
       - name: Download SHA256SUMS

@@ -32,6 +32,7 @@ on:
 
 jobs:
   sign:
+    name: Sign macOS / ${{ matrix.target }}
     runs-on: macos-latest
     strategy:
       matrix:

@@ -8,6 +8,7 @@ on:
 
 jobs:
   publish:
+    name: Publish Cargo
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

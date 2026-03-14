@@ -39,6 +39,7 @@ on:
 
 jobs:
   dmg:
+    name: Package DMG / ${{ matrix.target }}
     runs-on: macos-latest
     permissions:
       contents: write

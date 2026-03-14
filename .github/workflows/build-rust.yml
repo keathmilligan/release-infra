@@ -23,6 +23,7 @@ on:
 
 jobs:
   build:
+    name: Build Rust / ${{ matrix.target }}
     strategy:
       fail-fast: true
       matrix:
