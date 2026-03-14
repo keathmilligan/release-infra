@@ -22,11 +22,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download MSI artifact
+      - name: Download ZIP artifact
         uses: actions/download-artifact@v4
         with:
-          name: msi-${{ inputs.project-name }}
-          path: msi/
+          name: zip-${{ inputs.project-name }}
+          path: zip/
 
       - name: Update nuspec version
         run: |
@@ -36,9 +36,9 @@ jobs:
 
       - name: Update install script URLs
         run: |
-          $msiUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
+          $zipUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip"
           $install = Get-Content "dist/chocolatey/tools/chocolateyInstall.ps1" -Raw
-          $install = $install -replace '\$url\s*=.*', "`$url = '$msiUrl'"
+          $install = $install -replace '\$url\s*=.*', "`$url = '$zipUrl'"
           Set-Content "dist/chocolatey/tools/chocolateyInstall.ps1" $install
 
       - name: Build nupkg
