@@ -66,12 +66,12 @@ jobs:
             ARCH="arm64"
           fi
           
-          # Fetch latest release info and download
+          # Fetch latest release info and download using jq
           LATEST_URL=$(curl -s "https://api.github.com/repos/goreleaser/nfpm/releases/latest" | \
-            grep "browser_download_url.*linux_${ARCH}.deb" | cut -d '"' -f 4)
+            jq -r '.assets[] | select(.name | contains("linux_'"${ARCH}"'.deb")) | .browser_download_url' | head -1)
           
-          if [ -z "$LATEST_URL" ]; then
-            echo "Failed to find nfpm download URL"
+          if [ -z "$LATEST_URL" ] || [ "$LATEST_URL" = "null" ]; then
+            echo "Failed to find nfpm download URL for architecture: $ARCH"
             exit 1
           fi
           
