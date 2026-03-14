@@ -34,7 +34,26 @@ jobs:
           $id = if ('${{ inputs.winget-id }}') { '${{ inputs.winget-id }}' } else { "${{ vars.WINGET_ID_PREFIX }}.${{ inputs.project-name }}" }
           echo "winget-id=$id" >> $env:GITHUB_OUTPUT
 
+      - name: Check for existing PR
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PAT }}
+        run: |
+          $id = "${{ steps.id.outputs.winget-id }}"
+          $query = "$id version ${{ inputs.version }}"
+          $existing = gh pr list --repo microsoft/winget-pkgs --state open --search "$query" --json number,title --limit 5 | ConvertFrom-Json
+          $closed = gh pr list --repo microsoft/winget-pkgs --state merged --search "$query" --json number,title --limit 5 | ConvertFrom-Json
+          $all = @($existing) + @($closed) | Where-Object { $_.title -match [regex]::Escape($id) -and $_.title -match [regex]::Escape("${{ inputs.version }}") }
+          if ($all.Count -gt 0) {
+            Write-Host "PR already exists for ${id} ${{ inputs.version }}: $($all[0].title) (#$($all[0].number))"
+            echo "skip=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No existing PR found for ${id} ${{ inputs.version }}"
+            echo "skip=false" >> $env:GITHUB_OUTPUT
+          }
+
       - name: Submit manifest
+        if: steps.check.outputs.skip != 'true'
         run: |
           $msiUrl = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
           .\wingetcreate.exe update `
