@@ -68,7 +68,7 @@ jobs:
           
           # Fetch latest release info and download using jq
           LATEST_URL=$(curl -s "https://api.github.com/repos/goreleaser/nfpm/releases/latest" | \
-            jq -r '.assets[] | select(.name | contains("linux_'"${ARCH}"'.deb")) | .browser_download_url' | head -1)
+            jq -r '.assets[] | select(.name | endswith("_'"${ARCH}"'.deb")) | .browser_download_url' | head -1)
           
           if [ -z "$LATEST_URL" ] || [ "$LATEST_URL" = "null" ]; then
             echo "Failed to find nfpm download URL for architecture: $ARCH"
