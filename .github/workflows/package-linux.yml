@@ -60,11 +60,8 @@ jobs:
       - name: Install nfpm
         if: steps.check.outputs.skip != 'true'
         run: |
-          # Get latest nfpm version and download appropriate deb package
+          # nfpm is a Go binary that can cross-compile - always use amd64 on the build host
           ARCH="amd64"
-          if [ "${{ matrix.nfpm-arch }}" = "arm64" ]; then
-            ARCH="arm64"
-          fi
           
           # Fetch latest release info and download using jq
           LATEST_URL=$(curl -s "https://api.github.com/repos/goreleaser/nfpm/releases/latest" | \
