@@ -32,6 +32,9 @@ on:
 jobs:
   build-msi:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: .
     steps:
       - name: Checkout
         uses: actions/checkout@v4
