@@ -82,6 +82,10 @@ on:
         required: false
         type: boolean
         default: false
+      enable-msi:
+        required: false
+        type: boolean
+        default: false
       enable-install-scripts:
         required: false
         type: boolean
@@ -271,7 +275,7 @@ jobs:
   # ─── Package: MSI ────────────────────────────────────────────────
   package-msi:
     needs: [prepare, release]
-    if: inputs.enable-chocolatey && needs.release.result == 'success'
+    if: inputs.enable-msi && needs.release.result == 'success'
     uses: keathmilligan/release-infra/.github/workflows/package-msi.yml@master
     with:
       project-name: ${{ inputs.project-name }}
@@ -281,8 +285,8 @@ jobs:
 
   # ─── Publish: Chocolatey ─────────────────────────────────────────
   publish-chocolatey:
-    needs: [prepare, release, package-msi]
-    if: inputs.enable-chocolatey && needs.package-msi.result == 'success'
+    needs: [prepare, release]
+    if: inputs.enable-chocolatey && needs.release.result == 'success'
     uses: keathmilligan/release-infra/.github/workflows/publish-chocolatey.yml@master
     with:
       project-name: ${{ inputs.project-name }}

@@ -44,7 +44,7 @@ A tag push (`v*`) on any adopting repository triggers a complete build-sign-pack
 | `publish-scoop.yml` | Generate manifest, push to bucket repo |
 | `publish-chocolatey.yml` | Build nupkg, push to community repo |
 | `publish-winget.yml` | Generate manifest, PR to winget-pkgs |
-| `package-msi.yml` | Build MSI via cargo-wix, sign |
+| `package-msi.yml` | Build MSI via cargo-wix, sign (requires `enable-msi: true`) |
 | `package-dmg.yml` | Build DMG, sign, notarize |
 | `package-linux.yml` | nfpm: deb + rpm + apk |
 | `publish-apt.yml` | Add deb to apt repo via dispatch |
@@ -258,7 +258,7 @@ Your project needs a `dist/chocolatey/` directory with:
 - `tools/chocolateyInstall.ps1` — install script
 - `tools/chocolateyUninstall.ps1` — uninstall script
 
-Chocolatey and winget both require a signed MSI installer. The `package-msi.yml` workflow builds this using `cargo-wix`, which requires a `dist/wix/main.wxs` configuration file in your project.
+Chocolatey packages the portable `.exe` ZIP — no MSI is required. `enable-chocolatey` is independent of `enable-msi`.
 
 ---
 
@@ -274,7 +274,7 @@ Chocolatey and winget both require a signed MSI installer. The `package-msi.yml`
 
 The workflow uses `wingetcreate` to automatically generate a manifest and submit a PR to `microsoft/winget-pkgs`. The PR goes through automated validation before merging.
 
-Like Chocolatey, winget requires a signed MSI installer (`dist/wix/main.wxs`).
+winget uses portable `.exe` installers and does not require an MSI — the `publish-winget.yml` workflow submits a manifest directly using `wingetcreate`. No `enable-msi` flag is needed for winget alone.
 
 ---
 
@@ -439,6 +439,7 @@ jobs:
       packages-repo: <your-org>/packages
       enable-homebrew: true
       enable-scoop: true
+      enable-msi: false
       enable-chocolatey: false
       enable-winget: false
       enable-apt: true
@@ -467,7 +468,7 @@ dist/
 │       ├── chocolateyInstall.ps1
 │       └── chocolateyUninstall.ps1
 ├── PKGBUILD               # Required for AUR
-└── wix/                   # Required for MSI (Chocolatey/winget)
+└── wix/                   # Required for MSI (enable-msi: true)
     └── main.wxs
 ```
 
@@ -638,6 +639,7 @@ jobs:
       enable-homebrew: true
       enable-apt: true
       enable-cargo: true
+      enable-msi: false
       enable-readme-badges: true
       repo-owner: myorg
       repo-name: mytool
