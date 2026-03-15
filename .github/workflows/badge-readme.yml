@@ -128,7 +128,9 @@ jobs:
             local label="$1"
             local wf="$2"
             local url="${BASE}/actions/workflows/${wf}"
-            CHANNEL_BADGES="${CHANNEL_BADGES}[![${label}](${url}/badge.svg)](${url})"$'\n'
+            local encoded_label
+            encoded_label=$(printf '%s' "$label" | sed 's/ /%20/g')
+            CHANNEL_BADGES="${CHANNEL_BADGES}[![${label}](${url}/badge.svg?label=${encoded_label})](${url})"$'\n'
           }
 
           [ "$ENABLE_DMG"             = "true" ] && add_badge "macOS DMG"        "$REL_WF"
