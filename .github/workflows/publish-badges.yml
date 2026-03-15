@@ -51,6 +51,10 @@ on:
         required: false
         type: boolean
         default: false
+      enable-msi:
+        required: false
+        type: boolean
+        default: false
       enable-aur:
         required: false
         type: boolean
@@ -82,6 +86,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_VERSION:          ${{ inputs.version }}
           ENABLE_DMG:             ${{ inputs.enable-dmg }}
+          ENABLE_MSI:             ${{ inputs.enable-msi }}
           ENABLE_HOMEBREW:        ${{ inputs.enable-homebrew }}
           ENABLE_SCOOP:           ${{ inputs.enable-scoop }}
           ENABLE_CHOCOLATEY:      ${{ inputs.enable-chocolatey }}
@@ -114,6 +119,7 @@ jobs:
               '. + [{"file": $f, "label": $l}]')
           }
           [ "$ENABLE_DMG"             = "true" ] && add "macos-dmg"       "macOS DMG"
+          [ "$ENABLE_MSI"             = "true" ] && add "msi"             "Windows MSI"
           [ "$ENABLE_HOMEBREW"        = "true" ] && add "homebrew"        "Homebrew"
           [ "$ENABLE_SCOOP"           = "true" ] && add "scoop"           "Scoop"
           [ "$ENABLE_CHOCOLATEY"      = "true" ] && add "chocolatey"      "Chocolatey"

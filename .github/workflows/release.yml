@@ -385,6 +385,7 @@ jobs:
       enable-rpm: ${{ inputs.enable-rpm }}
       enable-apk: ${{ inputs.enable-apk }}
       enable-dmg: ${{ inputs.enable-dmg }}
+      enable-msi: ${{ inputs.enable-msi }}
       enable-aur: ${{ inputs.enable-aur }}
       enable-cargo: ${{ inputs.enable-cargo }}
       enable-npm: ${{ inputs.enable-npm || inputs.project-type == 'node' }}
