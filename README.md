@@ -51,7 +51,7 @@ A tag push (`v*`) on any adopting repository triggers a complete build-sign-pack
 | `publish-rpm.yml` | Add rpm to rpm repo via dispatch |
 | `publish-aur.yml` | Update PKGBUILD, push to AUR |
 | `publish-install-scripts.yml` | Render and publish curl/PowerShell install scripts |
-| `publish-badges.yml` | Generate per-channel badge SVGs, upload to release, publish to packages repo |
+| `publish-badges.yml` | Generate per-channel badge SVGs and publish them to the packages repo |
 
 ## Target Matrix
 
