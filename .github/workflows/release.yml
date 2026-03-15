@@ -86,6 +86,22 @@ on:
         required: false
         type: boolean
         default: false
+      # ─── README badge generation ───────────────────────────────────
+      enable-readme-badges:
+        description: Generate a README badge block after release
+        required: false
+        type: boolean
+        default: false
+      repo-owner:
+        description: GitHub repository owner — required when enable-readme-badges is true
+        required: false
+        type: string
+        default: ""
+      repo-name:
+        description: GitHub repository name — required when enable-readme-badges is true
+        required: false
+        type: string
+        default: ""
 
 jobs:
   # ─── Version extraction and validation ───────────────────────────
@@ -357,3 +373,25 @@ jobs:
       version: ${{ needs.prepare.outputs.version }}
       packages-repo: ${{ inputs.packages-repo }}
     secrets: inherit
+
+  # ─── Generate README badges ───────────────────────────────────────
+  generate-badges:
+    needs: [release]
+    if: inputs.enable-readme-badges && needs.release.result == 'success'
+    uses: keathmilligan/release-infra/.github/workflows/badge-readme.yml@master
+    with:
+      repo-owner: ${{ inputs.repo-owner }}
+      repo-name: ${{ inputs.repo-name }}
+      project-name: ${{ inputs.project-name }}
+      enable-homebrew: ${{ inputs.enable-homebrew }}
+      enable-scoop: ${{ inputs.enable-scoop }}
+      enable-chocolatey: ${{ inputs.enable-chocolatey }}
+      enable-winget: ${{ inputs.enable-winget }}
+      enable-apt: ${{ inputs.enable-apt }}
+      enable-rpm: ${{ inputs.enable-rpm }}
+      enable-apk: ${{ inputs.enable-apk }}
+      enable-dmg: ${{ inputs.enable-dmg }}
+      enable-aur: ${{ inputs.enable-aur }}
+      enable-cargo: ${{ inputs.enable-cargo }}
+      enable-npm: ${{ inputs.enable-npm || inputs.project-type == 'node' }}
+      enable-install-scripts: ${{ inputs.enable-install-scripts }}

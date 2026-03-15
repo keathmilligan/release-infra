@@ -25,6 +25,7 @@ A tag push (`v*`) on any adopting repository triggers a complete build-sign-pack
 - [Variables Reference](#variables-reference)
 - [GPG Key Rotation](#gpg-key-rotation)
 - [User Install Instructions](#user-install-instructions)
+- [README Badges](#readme-badges)
 - [Versioning](#versioning)
 
 ## Workflows
@@ -602,6 +603,62 @@ irm https://<packages-domain>/<project>/install.ps1 | iex
 ```bash
 cargo install <project>
 ```
+
+## README Badges
+
+When `enable-readme-badges: true` is set in your caller workflow, the pipeline generates a Markdown badge block after each release and displays it in the GitHub Actions job summary. Copy the output into your project's `README.md`.
+
+Badges are automatically scoped to the channels you have enabled — disabled channels produce no badge.
+
+### Inputs
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `enable-readme-badges` | No | `false` | Enable badge block generation |
+| `repo-owner` | When badges enabled | `""` | GitHub repository owner (org or user) |
+| `repo-name` | When badges enabled | `""` | GitHub repository name |
+
+The `badge-readme.yml` workflow also accepts `ci-workflow-filename` (default: `ci.yml`) and `release-workflow-filename` (default: `release.yml`) if your project uses non-standard workflow filenames, but these cannot be passed through the orchestrator — call `badge-readme.yml` directly if you need to override them.
+
+### Usage example
+
+```yaml
+jobs:
+  release:
+    uses: <your-org>/release-infra/.github/workflows/release.yml@v1
+    with:
+      project-name: mytool
+      binary-name: mytool
+      project-type: rust
+      targets: >-
+        x86_64-apple-darwin,
+        aarch64-apple-darwin,
+        x86_64-pc-windows-msvc,
+        x86_64-unknown-linux-gnu
+      enable-homebrew: true
+      enable-apt: true
+      enable-cargo: true
+      enable-readme-badges: true
+      repo-owner: myorg
+      repo-name: mytool
+    secrets: inherit
+```
+
+### Sample output
+
+For a project with Homebrew, apt, and crates.io enabled, the badge block written to the job summary looks like:
+
+```markdown
+[![CI](https://github.com/myorg/mytool/actions/workflows/ci.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/ci.yml)
+[![Release](https://github.com/myorg/mytool/actions/workflows/release.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/release.yml)
+[![Homebrew](https://github.com/myorg/mytool/actions/workflows/release.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/release.yml)
+[![apt](https://github.com/myorg/mytool/actions/workflows/release.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/release.yml)
+[![crates.io](https://github.com/myorg/mytool/actions/workflows/release.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/release.yml)
+```
+
+Paste this block into the top of your `README.md`. The badges update automatically as workflows run — no further changes are needed after the initial paste.
+
+---
 
 ## Versioning
 
