@@ -51,6 +51,7 @@ A tag push (`v*`) on any adopting repository triggers a complete build-sign-pack
 | `publish-rpm.yml` | Add rpm to rpm repo via dispatch |
 | `publish-aur.yml` | Update PKGBUILD, push to AUR |
 | `publish-install-scripts.yml` | Render and publish curl/PowerShell install scripts |
+| `publish-badges.yml` | Generate per-channel badge SVGs, upload to release, publish to packages repo |
 
 ## Target Matrix
 
@@ -607,19 +608,17 @@ cargo install <project>
 
 ## README Badges
 
-When `enable-readme-badges: true` is set in your caller workflow, the pipeline generates a Markdown badge block after each release and displays it in the GitHub Actions job summary. Copy the output into your project's `README.md`.
+When `enable-badges: true` is set in your caller workflow, the pipeline generates a static SVG badge file for each enabled distribution channel and publishes them to your packages repository (alongside install scripts) under `<project>/badges/`. They are then served via GitHub Pages.
 
-Badges are automatically scoped to the channels you have enabled — disabled channels produce no badge.
+CI and Release workflow status use standard GitHub Actions badges directly. Per-channel badges are version-stamped static SVGs updated on every release.
 
 ### Inputs
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `enable-readme-badges` | No | `false` | Enable badge block generation |
-| `repo-owner` | When badges enabled | `""` | GitHub repository owner (org or user) |
-| `repo-name` | When badges enabled | `""` | GitHub repository name |
+| `enable-badges` | No | `false` | Generate and publish per-channel badge SVGs to the packages repo |
 
-The `badge-readme.yml` workflow also accepts `ci-workflow-filename` (default: `ci.yml`) and `release-workflow-filename` (default: `release.yml`) if your project uses non-standard workflow filenames, but these cannot be passed through the orchestrator — call `badge-readme.yml` directly if you need to override them.
+The packages repository must already be configured (see [section 9](#9-self-hosted-aptrpm-repositories)) and `PACKAGES_REPO_TOKEN` must be set. The `update-badges` dispatch event must be handled by the packages repo workflow.
 
 ### Usage example
 
@@ -636,29 +635,27 @@ jobs:
         aarch64-apple-darwin,
         x86_64-pc-windows-msvc,
         x86_64-unknown-linux-gnu
+      packages-repo: <your-org>/packages
       enable-homebrew: true
       enable-apt: true
       enable-cargo: true
-      enable-msi: false
-      enable-readme-badges: true
-      repo-owner: myorg
-      repo-name: mytool
+      enable-badges: true
     secrets: inherit
 ```
 
-### Sample output
+### README badge block
 
-For a project with Homebrew, apt, and crates.io enabled, the badge block written to the job summary looks like:
+Add the following to your project `README.md`, substituting your packages domain, project name, and repo. CI and Release use native GitHub workflow badges; channel badges are served from your packages repo:
 
 ```markdown
-[![CI](https://github.com/myorg/mytool/actions/workflows/ci.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/ci.yml)
-[![Release](https://github.com/myorg/mytool/actions/workflows/release.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/release.yml)
-[![Homebrew](https://github.com/myorg/mytool/actions/workflows/release.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/release.yml)
-[![apt](https://github.com/myorg/mytool/actions/workflows/release.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/release.yml)
-[![crates.io](https://github.com/myorg/mytool/actions/workflows/release.yml/badge.svg)](https://github.com/myorg/mytool/actions/workflows/release.yml)
+[![CI](https://github.com/<your-org>/mytool/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-org>/mytool/actions/workflows/ci.yml)
+[![Release](https://github.com/<your-org>/mytool/actions/workflows/release.yml/badge.svg)](https://github.com/<your-org>/mytool/actions/workflows/release.yml)
+[![Homebrew](https://<packages-domain>/mytool/badges/homebrew.svg)](https://github.com/<your-org>/mytool/releases/latest)
+[![apt](https://<packages-domain>/mytool/badges/apt.svg)](https://github.com/<your-org>/mytool/releases/latest)
+[![crates.io](https://<packages-domain>/mytool/badges/crates-io.svg)](https://github.com/<your-org>/mytool/releases/latest)
 ```
 
-Paste this block into the top of your `README.md`. The badges update automatically as workflows run — no further changes are needed after the initial paste.
+Badge files are named after their channel: `macos-dmg.svg`, `homebrew.svg`, `scoop.svg`, `chocolatey.svg`, `winget.svg`, `apt.svg`, `rpm.svg`, `apk.svg`, `aur.svg`, `crates-io.svg`, `npm.svg`, `install-scripts.svg`.
 
 ---
 

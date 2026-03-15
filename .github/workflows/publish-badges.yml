@@ -1,0 +1,145 @@
+name: Publish README Badges
+
+on:
+  workflow_call:
+    inputs:
+      project-name:
+        description: Name of the project
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix)
+        required: true
+        type: string
+      packages-repo:
+        description: Packages repository (owner/repo) that hosts badges via GitHub Pages
+        required: true
+        type: string
+      # ─── Distribution channel flags ───────────────────────────────
+      enable-homebrew:
+        required: false
+        type: boolean
+        default: false
+      enable-scoop:
+        required: false
+        type: boolean
+        default: false
+      enable-chocolatey:
+        required: false
+        type: boolean
+        default: false
+      enable-winget:
+        required: false
+        type: boolean
+        default: false
+      enable-apt:
+        required: false
+        type: boolean
+        default: false
+      enable-rpm:
+        required: false
+        type: boolean
+        default: false
+      enable-apk:
+        required: false
+        type: boolean
+        default: false
+      enable-dmg:
+        required: false
+        type: boolean
+        default: false
+      enable-aur:
+        required: false
+        type: boolean
+        default: false
+      enable-cargo:
+        required: false
+        type: boolean
+        default: false
+      enable-npm:
+        required: false
+        type: boolean
+        default: false
+      enable-install-scripts:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      PACKAGES_REPO_TOKEN:
+        required: false
+
+jobs:
+  publish:
+    name: Publish README Badges
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate badge SVGs
+        env:
+          VERSION: ${{ inputs.version }}
+          ENABLE_DMG:             ${{ inputs.enable-dmg }}
+          ENABLE_HOMEBREW:        ${{ inputs.enable-homebrew }}
+          ENABLE_SCOOP:           ${{ inputs.enable-scoop }}
+          ENABLE_CHOCOLATEY:      ${{ inputs.enable-chocolatey }}
+          ENABLE_WINGET:          ${{ inputs.enable-winget }}
+          ENABLE_APT:             ${{ inputs.enable-apt }}
+          ENABLE_RPM:             ${{ inputs.enable-rpm }}
+          ENABLE_APK:             ${{ inputs.enable-apk }}
+          ENABLE_AUR:             ${{ inputs.enable-aur }}
+          ENABLE_CARGO:           ${{ inputs.enable-cargo }}
+          ENABLE_NPM:             ${{ inputs.enable-npm }}
+          ENABLE_INSTALL_SCRIPTS: ${{ inputs.enable-install-scripts }}
+        run: |
+          mkdir -p badges
+
+          # Fetch a shields.io static badge SVG and save it.
+          # Label color: 555 (dark grey, standard shields.io left side)
+          # Value color: 4c1 (green = passing)
+          fetch_badge() {
+            local filename="$1"
+            local label="$2"
+            local message="$3"
+            local color="${4:-4c1}"
+            # URL-encode spaces and special chars in label/message
+            local enc_label enc_message
+            enc_label=$(printf '%s' "$label"   | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
+            enc_message=$(printf '%s' "$message" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
+            curl -fsSL \
+              "https://img.shields.io/badge/${enc_label}-${enc_message}-${color}" \
+              -o "badges/${filename}.svg"
+          }
+
+          [ "$ENABLE_DMG"             = "true" ] && fetch_badge "macos-dmg"       "macOS DMG"       "v${VERSION}"
+          [ "$ENABLE_HOMEBREW"        = "true" ] && fetch_badge "homebrew"        "Homebrew"        "v${VERSION}"
+          [ "$ENABLE_SCOOP"           = "true" ] && fetch_badge "scoop"           "Scoop"           "v${VERSION}"
+          [ "$ENABLE_CHOCOLATEY"      = "true" ] && fetch_badge "chocolatey"      "Chocolatey"      "v${VERSION}"
+          [ "$ENABLE_WINGET"          = "true" ] && fetch_badge "winget"          "winget"          "v${VERSION}"
+          [ "$ENABLE_APT"             = "true" ] && fetch_badge "apt"             "apt"             "v${VERSION}"
+          [ "$ENABLE_RPM"             = "true" ] && fetch_badge "rpm"             "rpm"             "v${VERSION}"
+          [ "$ENABLE_APK"             = "true" ] && fetch_badge "apk"             "apk"             "v${VERSION}"
+          [ "$ENABLE_AUR"             = "true" ] && fetch_badge "aur"             "AUR"             "v${VERSION}"
+          [ "$ENABLE_CARGO"           = "true" ] && fetch_badge "crates-io"       "crates.io"       "v${VERSION}"
+          [ "$ENABLE_NPM"             = "true" ] && fetch_badge "npm"             "npm"             "v${VERSION}"
+          [ "$ENABLE_INSTALL_SCRIPTS" = "true" ] && fetch_badge "install-scripts" "install scripts" "v${VERSION}"
+
+          echo "Generated badges:"
+          ls -la badges/
+
+      - name: Trigger packages repo badge update
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PACKAGES_REPO_TOKEN }}
+          repository: ${{ inputs.packages-repo }}
+          event-type: update-badges
+          client-payload: |
+            {
+              "project": "${{ inputs.project-name }}",
+              "version": "${{ inputs.version }}",
+              "repo": "${{ github.repository }}",
+              "run_id": "${{ github.run_id }}"
+            }
+
+      - name: Upload badge SVGs to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          files: badges/*.svg
