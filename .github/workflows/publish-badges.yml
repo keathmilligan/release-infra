@@ -132,7 +132,10 @@ jobs:
           [ "$ENABLE_NPM"             = "true" ] && add "npm"             "npm"
           [ "$ENABLE_INSTALL_SCRIPTS" = "true" ] && add "install-scripts" "install scripts"
 
-          echo "channels=$CHANNELS" >> "$GITHUB_OUTPUT"
+          # JSON-encode the channels array as a string so it survives
+          # GitHub Actions expression interpolation in the dispatch payload.
+          CHANNELS_JSON=$(echo "$CHANNELS" | jq -c tostring)
+          echo "channels-json=$CHANNELS_JSON" >> "$GITHUB_OUTPUT"
           echo "Enabled channels: $CHANNELS"
 
       - name: Trigger packages repo badge update
@@ -145,7 +148,7 @@ jobs:
             {
               "project": "${{ inputs.project-name }}",
               "version": "${{ steps.resolve.outputs.version }}",
-              "channels": ${{ steps.resolve.outputs.channels }},
+              "channels": ${{ steps.resolve.outputs.channels-json }},
               "repo": "${{ github.repository }}",
               "run_id": "${{ github.run_id }}"
             }
