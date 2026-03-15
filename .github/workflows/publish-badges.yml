@@ -8,9 +8,12 @@ on:
         required: true
         type: string
       version:
-        description: Release version (without v prefix)
-        required: true
+        description: >-
+          Release version (without v prefix). When omitted the workflow fetches
+          the latest published release tag from the GitHub API automatically.
+        required: false
         type: string
+        default: ""
       packages-repo:
         description: Packages repository (owner/repo) that hosts badges via GitHub Pages
         required: true
@@ -73,9 +76,11 @@ jobs:
     name: Publish README Badges
     runs-on: ubuntu-latest
     steps:
-      - name: Generate badge SVGs
+      - name: Resolve version and build channel list
+        id: resolve
         env:
-          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION:          ${{ inputs.version }}
           ENABLE_DMG:             ${{ inputs.enable-dmg }}
           ENABLE_HOMEBREW:        ${{ inputs.enable-homebrew }}
           ENABLE_SCOOP:           ${{ inputs.enable-scoop }}
@@ -89,40 +94,40 @@ jobs:
           ENABLE_NPM:             ${{ inputs.enable-npm }}
           ENABLE_INSTALL_SCRIPTS: ${{ inputs.enable-install-scripts }}
         run: |
-          mkdir -p badges
+          # ── Resolve version ──────────────────────────────────────────
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+            echo "Resolved version from input: $VERSION"
+          else
+            TAG=$(gh api "repos/${{ github.repository }}/releases/latest" --jq '.tag_name')
+            VERSION="${TAG#v}"
+            echo "Auto-detected latest release version: $VERSION (tag: $TAG)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # Fetch a shields.io static badge SVG and save it.
-          # Label color: 555 (dark grey, standard shields.io left side)
-          # Value color: 4c1 (green = passing)
-          fetch_badge() {
-            local filename="$1"
-            local label="$2"
-            local message="$3"
-            local color="${4:-4c1}"
-            # URL-encode spaces and special chars in label/message
-            local enc_label enc_message
-            enc_label=$(printf '%s' "$label"   | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
-            enc_message=$(printf '%s' "$message" | python3 -c "import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
-            curl -fsSL \
-              "https://img.shields.io/badge/${enc_label}-${enc_message}-${color}" \
-              -o "badges/${filename}.svg"
+          # ── Build enabled-channels JSON array ─────────────────────────
+          # Format: [{"file":"macos-dmg","label":"macOS DMG"}, ...]
+          CHANNELS="[]"
+          add() {
+            CHANNELS=$(echo "$CHANNELS" | jq -c \
+              --arg f "$1" --arg l "$2" \
+              '. + [{"file": $f, "label": $l}]')
           }
+          [ "$ENABLE_DMG"             = "true" ] && add "macos-dmg"       "macOS DMG"
+          [ "$ENABLE_HOMEBREW"        = "true" ] && add "homebrew"        "Homebrew"
+          [ "$ENABLE_SCOOP"           = "true" ] && add "scoop"           "Scoop"
+          [ "$ENABLE_CHOCOLATEY"      = "true" ] && add "chocolatey"      "Chocolatey"
+          [ "$ENABLE_WINGET"          = "true" ] && add "winget"          "winget"
+          [ "$ENABLE_APT"             = "true" ] && add "apt"             "apt"
+          [ "$ENABLE_RPM"             = "true" ] && add "rpm"             "rpm"
+          [ "$ENABLE_APK"             = "true" ] && add "apk"             "apk"
+          [ "$ENABLE_AUR"             = "true" ] && add "aur"             "AUR"
+          [ "$ENABLE_CARGO"           = "true" ] && add "crates-io"       "crates.io"
+          [ "$ENABLE_NPM"             = "true" ] && add "npm"             "npm"
+          [ "$ENABLE_INSTALL_SCRIPTS" = "true" ] && add "install-scripts" "install scripts"
 
-          [ "$ENABLE_DMG"             = "true" ] && fetch_badge "macos-dmg"       "macOS DMG"       "v${VERSION}"
-          [ "$ENABLE_HOMEBREW"        = "true" ] && fetch_badge "homebrew"        "Homebrew"        "v${VERSION}"
-          [ "$ENABLE_SCOOP"           = "true" ] && fetch_badge "scoop"           "Scoop"           "v${VERSION}"
-          [ "$ENABLE_CHOCOLATEY"      = "true" ] && fetch_badge "chocolatey"      "Chocolatey"      "v${VERSION}"
-          [ "$ENABLE_WINGET"          = "true" ] && fetch_badge "winget"          "winget"          "v${VERSION}"
-          [ "$ENABLE_APT"             = "true" ] && fetch_badge "apt"             "apt"             "v${VERSION}"
-          [ "$ENABLE_RPM"             = "true" ] && fetch_badge "rpm"             "rpm"             "v${VERSION}"
-          [ "$ENABLE_APK"             = "true" ] && fetch_badge "apk"             "apk"             "v${VERSION}"
-          [ "$ENABLE_AUR"             = "true" ] && fetch_badge "aur"             "AUR"             "v${VERSION}"
-          [ "$ENABLE_CARGO"           = "true" ] && fetch_badge "crates-io"       "crates.io"       "v${VERSION}"
-          [ "$ENABLE_NPM"             = "true" ] && fetch_badge "npm"             "npm"             "v${VERSION}"
-          [ "$ENABLE_INSTALL_SCRIPTS" = "true" ] && fetch_badge "install-scripts" "install scripts" "v${VERSION}"
-
-          echo "Generated badges:"
-          ls -la badges/
+          echo "channels=$CHANNELS" >> "$GITHUB_OUTPUT"
+          echo "Enabled channels: $CHANNELS"
 
       - name: Trigger packages repo badge update
         uses: peter-evans/repository-dispatch@v3
@@ -133,13 +138,8 @@ jobs:
           client-payload: |
             {
               "project": "${{ inputs.project-name }}",
-              "version": "${{ inputs.version }}",
+              "version": "${{ steps.resolve.outputs.version }}",
+              "channels": ${{ steps.resolve.outputs.channels }},
               "repo": "${{ github.repository }}",
               "run_id": "${{ github.run_id }}"
             }
-
-      - name: Upload badge SVGs to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ inputs.version }}
-          files: badges/*.svg
