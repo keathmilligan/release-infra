@@ -366,7 +366,6 @@ jobs:
       binary-name: ${{ inputs.binary-name }}
       version: ${{ needs.prepare.outputs.version }}
       packages-repo: ${{ inputs.packages-repo }}
-      templates-repo: ${{ github.repository }}
     secrets: inherit
 
   # ─── Publish per-channel badge SVGs ─────────────────────────────
