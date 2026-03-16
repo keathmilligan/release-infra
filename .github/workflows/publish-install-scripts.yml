@@ -21,10 +21,10 @@ on:
         required: true
         type: string
       templates-repo:
-        description: Repository containing install script templates (owner/repo)
+        description: Repository containing install script templates (owner/repo). Defaults to the repository where this workflow is defined.
         required: false
         type: string
-        default: "keathmilligan/release-infra"
+        default: ""
     secrets:
       PACKAGES_REPO_TOKEN:
         required: false
@@ -39,7 +39,7 @@ jobs:
       - name: Checkout release-infra (for templates)
         uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.templates-repo }}
+          repository: ${{ inputs.templates-repo || github.repository }}
           path: release-infra
 
       - name: Render install scripts from templates

@@ -402,7 +402,7 @@ Direct install scripts (`install.sh` for macOS/Linux, `install.ps1` for Windows)
 #### Prerequisites
 
 - The packages repository must already be configured (see [section 9](#9-self-hosted-aptrpm-repositories)).
-- The `PACKAGES_DOMAIN` variable must be set on the packages repository (e.g. `packages.keathmilligan.net`).
+- The `PACKAGES_DOMAIN` variable must be set on the packages repository (e.g. `packages.example.com`).
 - The `PACKAGES_REPO_TOKEN` secret must be configured on the project repository (same token used for apt/rpm dispatch).
 
 No additional secrets or variables are needed beyond those already required for the packages repository.

@@ -176,7 +176,7 @@ jobs:
   build-rust:
     needs: prepare
     if: inputs.project-type == 'rust'
-    uses: keathmilligan/release-infra/.github/workflows/build-rust.yml@master
+    uses: ./.github/workflows/build-rust.yml
     with:
       binary-name: ${{ inputs.binary-name }}
       targets: ${{ inputs.targets }}
@@ -185,7 +185,7 @@ jobs:
   build-node:
     needs: prepare
     if: inputs.project-type == 'node'
-    uses: keathmilligan/release-infra/.github/workflows/build-node.yml@master
+    uses: ./.github/workflows/build-node.yml
     with:
       project-name: ${{ inputs.project-name }}
       node-version: ${{ inputs.node-version }}
@@ -194,7 +194,7 @@ jobs:
   sign-windows:
     needs: [prepare, build-rust]
     if: always() && needs.build-rust.result == 'success' && needs.prepare.outputs.has-windows-targets == 'true'
-    uses: keathmilligan/release-infra/.github/workflows/sign-windows.yml@master
+    uses: ./.github/workflows/sign-windows.yml
     with:
       binary-name: ${{ inputs.binary-name }}
       targets: ${{ needs.prepare.outputs.windows-targets-json }}
@@ -203,7 +203,7 @@ jobs:
   sign-macos:
     needs: [prepare, build-rust]
     if: always() && needs.build-rust.result == 'success' && needs.prepare.outputs.has-macos-targets == 'true'
-    uses: keathmilligan/release-infra/.github/workflows/sign-macos.yml@master
+    uses: ./.github/workflows/sign-macos.yml
     with:
       binary-name: ${{ inputs.binary-name }}
       targets: ${{ needs.prepare.outputs.macos-targets-json }}
@@ -219,7 +219,7 @@ jobs:
       (needs.sign-macos.result == 'success' || needs.sign-macos.result == 'skipped')
     permissions:
       contents: write
-    uses: keathmilligan/release-infra/.github/workflows/release-github.yml@master
+    uses: ./.github/workflows/release-github.yml
     with:
       project-name: ${{ inputs.project-name }}
       binary-name: ${{ inputs.binary-name }}
@@ -230,20 +230,20 @@ jobs:
   publish-cargo:
     needs: [prepare, release]
     if: inputs.enable-cargo && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-cargo.yml@master
+    uses: ./.github/workflows/publish-cargo.yml
     secrets: inherit
 
   publish-npm:
     needs: [prepare, release]
     if: inputs.project-type == 'node' && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-npm.yml@master
+    uses: ./.github/workflows/publish-npm.yml
     secrets: inherit
 
   # ─── Publish: Homebrew ───────────────────────────────────────────
   publish-homebrew:
     needs: [prepare, release]
     if: inputs.enable-homebrew && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-homebrew.yml@master
+    uses: ./.github/workflows/publish-homebrew.yml
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
@@ -255,7 +255,7 @@ jobs:
   publish-scoop:
     needs: [prepare, release]
     if: inputs.enable-scoop && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-scoop.yml@master
+    uses: ./.github/workflows/publish-scoop.yml
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
@@ -266,7 +266,7 @@ jobs:
   package-msi:
     needs: [prepare, release]
     if: inputs.enable-msi && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/package-msi.yml@master
+    uses: ./.github/workflows/package-msi.yml
     with:
       project-name: ${{ inputs.project-name }}
       binary-name: ${{ inputs.binary-name }}
@@ -277,7 +277,7 @@ jobs:
   publish-chocolatey:
     needs: [prepare, release]
     if: inputs.enable-chocolatey && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-chocolatey.yml@master
+    uses: ./.github/workflows/publish-chocolatey.yml
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
@@ -292,7 +292,7 @@ jobs:
   publish-winget:
     needs: [prepare, release]
     if: inputs.enable-winget && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-winget.yml@master
+    uses: ./.github/workflows/publish-winget.yml
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
@@ -302,7 +302,7 @@ jobs:
   package-dmg:
     needs: [prepare, sign-macos]
     if: inputs.enable-dmg && needs.sign-macos.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/package-dmg.yml@master
+    uses: ./.github/workflows/package-dmg.yml
     with:
       project-name: ${{ inputs.project-name }}
       binary-name: ${{ inputs.binary-name }}
@@ -314,7 +314,7 @@ jobs:
   package-linux:
     needs: [prepare, release]
     if: (inputs.enable-apt || inputs.enable-rpm || inputs.enable-apk) && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/package-linux.yml@master
+    uses: ./.github/workflows/package-linux.yml
     with:
       project-name: ${{ inputs.project-name }}
       binary-name: ${{ inputs.binary-name }}
@@ -328,7 +328,7 @@ jobs:
   publish-apt:
     needs: [prepare, package-linux]
     if: inputs.enable-apt && needs.package-linux.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-apt.yml@master
+    uses: ./.github/workflows/publish-apt.yml
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
@@ -339,7 +339,7 @@ jobs:
   publish-rpm:
     needs: [prepare, package-linux]
     if: inputs.enable-rpm && needs.package-linux.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-rpm.yml@master
+    uses: ./.github/workflows/publish-rpm.yml
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
@@ -350,7 +350,7 @@ jobs:
   publish-aur:
     needs: [prepare, release]
     if: inputs.enable-aur && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-aur.yml@master
+    uses: ./.github/workflows/publish-aur.yml
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
@@ -360,7 +360,7 @@ jobs:
   publish-install-scripts:
     needs: [prepare, release]
     if: inputs.enable-install-scripts && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-install-scripts.yml@master
+    uses: ./.github/workflows/publish-install-scripts.yml
     with:
       project-name: ${{ inputs.project-name }}
       binary-name: ${{ inputs.binary-name }}
@@ -372,7 +372,7 @@ jobs:
   publish-badges:
     needs: [prepare, release]
     if: inputs.enable-badges && needs.release.result == 'success'
-    uses: keathmilligan/release-infra/.github/workflows/publish-badges.yml@master
+    uses: ./.github/workflows/publish-badges.yml
     with:
       project-name: ${{ inputs.project-name }}
       version: ${{ needs.prepare.outputs.version }}
