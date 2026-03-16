@@ -145,6 +145,7 @@ jobs:
           echo "Enabled channels: $CHANNELS"
 
       - name: Trigger packages repo badge update
+        if: steps.resolve.outputs.version != ''
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.PACKAGES_REPO_TOKEN }}
