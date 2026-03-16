@@ -118,26 +118,34 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           # ── Build enabled-channels JSON array ─────────────────────────
-          # Format: [{"file":"macos-dmg","label":"macOS DMG"}, ...]
+          # Format: [{"file":"macos-dmg","label":"macOS DMG","asset":"*.dmg"}, ...]
+          # The "asset" field is a glob pattern matched against release assets to
+          # confirm the distribution was actually built and published. When the
+          # pattern is empty ("") no asset check is performed and the version badge
+          # is always emitted (used for channels published to external registries).
           CHANNELS="[]"
           add() {
             CHANNELS=$(echo "$CHANNELS" | jq -c \
-              --arg f "$1" --arg l "$2" \
-              '. + [{"file": $f, "label": $l}]')
+              --arg f "$1" --arg l "$2" --arg a "$3" \
+              '. + [{"file": $f, "label": $l, "asset": $a}]')
           }
-          [ "$ENABLE_DMG"             = "true" ] && add "macos-dmg"       "macOS DMG"
-          [ "$ENABLE_MSI"             = "true" ] && add "msi"             "Windows MSI"
-          [ "$ENABLE_HOMEBREW"        = "true" ] && add "homebrew"        "Homebrew"
-          [ "$ENABLE_SCOOP"           = "true" ] && add "scoop"           "Scoop"
-          [ "$ENABLE_CHOCOLATEY"      = "true" ] && add "chocolatey"      "Chocolatey"
-          [ "$ENABLE_WINGET"          = "true" ] && add "winget"          "winget"
-          [ "$ENABLE_APT"             = "true" ] && add "apt"             "apt"
-          [ "$ENABLE_RPM"             = "true" ] && add "rpm"             "rpm"
-          [ "$ENABLE_APK"             = "true" ] && add "apk"             "apk"
-          [ "$ENABLE_AUR"             = "true" ] && add "aur"             "AUR"
-          [ "$ENABLE_CARGO"           = "true" ] && add "crates-io"       "crates.io"
-          [ "$ENABLE_NPM"             = "true" ] && add "npm"             "npm"
-          [ "$ENABLE_INSTALL_SCRIPTS" = "true" ] && add "install-scripts" "install scripts"
+          # Channels with dedicated release assets — badge only shown when the
+          # asset is present in the release (i.e. the packaging job succeeded).
+          [ "$ENABLE_DMG"             = "true" ] && add "macos-dmg"       "macOS DMG"      "*.dmg"
+          [ "$ENABLE_MSI"             = "true" ] && add "msi"             "Windows MSI"    "*.msi"
+          [ "$ENABLE_APT"             = "true" ] && add "apt"             "apt"             "*.deb"
+          [ "$ENABLE_RPM"             = "true" ] && add "rpm"             "rpm"             "*.rpm"
+          [ "$ENABLE_APK"             = "true" ] && add "apk"             "apk"             "*.apk"
+          [ "$ENABLE_INSTALL_SCRIPTS" = "true" ] && add "install-scripts" "install scripts" "install.sh"
+          # Channels published to external registries — no per-channel release
+          # asset to check, so the badge is always shown when the flag is enabled.
+          [ "$ENABLE_HOMEBREW"        = "true" ] && add "homebrew"        "Homebrew"       ""
+          [ "$ENABLE_SCOOP"           = "true" ] && add "scoop"           "Scoop"          ""
+          [ "$ENABLE_CHOCOLATEY"      = "true" ] && add "chocolatey"      "Chocolatey"     ""
+          [ "$ENABLE_WINGET"          = "true" ] && add "winget"          "winget"         ""
+          [ "$ENABLE_AUR"             = "true" ] && add "aur"             "AUR"            ""
+          [ "$ENABLE_CARGO"           = "true" ] && add "crates-io"       "crates.io"      ""
+          [ "$ENABLE_NPM"             = "true" ] && add "npm"             "npm"            ""
 
           # JSON-encode the channels array as a string so it survives
           # GitHub Actions expression interpolation in the dispatch payload.
