@@ -43,4 +43,7 @@ jobs:
           fi
           
           # Publish the crate
-          cargo publish --token "$CARGO_REGISTRY_TOKEN"
+          # --allow-dirty: the CI checkout is clean (from a tag) but cargo's
+          # own index update can regenerate Cargo.lock, tripping the dirty
+          # working-directory check.  Safe because crates.io ignores lockfiles.
+          cargo publish --token "$CARGO_REGISTRY_TOKEN" --allow-dirty
