@@ -2,6 +2,12 @@ name: Publish to crates.io
 
 on:
   workflow_call:
+    inputs:
+      cargo-alt-name:
+        description: Alternative crate name for crates.io (if name is taken)
+        required: false
+        type: string
+        default: ""
     secrets:
       CARGO_REGISTRY_TOKEN:
         required: false
@@ -16,6 +22,13 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Apply alternative crate name
+        if: inputs.cargo-alt-name != ''
+        run: |
+          ALT_NAME="${{ inputs.cargo-alt-name }}"
+          echo "Replacing crate name with: $ALT_NAME"
+          sed -i -E "s/^name = \"[^\"]+\"/name = \"$ALT_NAME\"/" Cargo.toml
 
       - name: Publish to crates.io
         env:

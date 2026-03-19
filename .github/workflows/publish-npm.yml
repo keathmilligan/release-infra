@@ -11,6 +11,11 @@ on:
         required: false
         type: string
         default: "npm"
+      npm-alt-name:
+        description: Alternative package name for npm (if name is taken)
+        required: false
+        type: string
+        default: ""
     secrets:
       NPM_TOKEN:
         required: false
@@ -35,6 +40,13 @@ jobs:
           pattern: node-build-*
           path: dist/
           merge-multiple: true
+
+      - name: Apply alternative package name
+        if: inputs.npm-alt-name != ''
+        run: |
+          ALT_NAME="${{ inputs.npm-alt-name }}"
+          echo "Replacing package name with: $ALT_NAME"
+          jq --arg name "$ALT_NAME" '.name = $name' package.json > package.json.tmp && mv package.json.tmp package.json
 
       - name: Publish to npm
         env:

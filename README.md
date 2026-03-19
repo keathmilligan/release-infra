@@ -449,6 +449,13 @@ jobs:
       enable-dmg: false
       enable-aur: true
       enable-install-scripts: true
+      cargo-alt-name: ""              # Alternative crate name if taken on crates.io
+      npm-alt-name: ""                # Alternative package name if taken on npm
+      homebrew-alt-name: ""           # Alternative formula name if taken in Homebrew
+      chocolatey-alt-name: ""         # Alternative package name if taken on Chocolatey
+      scoop-alt-name: ""              # Alternative manifest name if taken in Scoop
+      apt-alt-name: ""                # Alternative package name for apt repo
+      rpm-alt-name: ""                # Alternative package name for rpm repo
     secrets: inherit
 ```
 
@@ -532,6 +539,20 @@ Set as **GitHub Actions repository variables** (Settings > Secrets and variables
 | `AUR_USERNAME` | AUR git commit username | `janedoe` | publish-aur.yml |
 | `WINGET_ID_PREFIX` | winget package ID prefix | `JaneDoe` | publish-winget.yml |
 | `REPO_LABEL` | Label for apt/rpm repo metadata | `myorg` | packages repo workflow |
+
+### Alternative Package Name Inputs
+
+These optional inputs allow publishing under a different name when the desired package name is already taken on a registry:
+
+| Input | Description | Default | Used by |
+|-------|-------------|---------|---------|
+| `cargo-alt-name` | Alternative crate name for crates.io | `""` | publish-cargo.yml |
+| `npm-alt-name` | Alternative package name for npm | `""` | publish-npm.yml |
+| `homebrew-alt-name` | Alternative formula name for Homebrew | `""` | publish-homebrew.yml |
+| `chocolatey-alt-name` | Alternative package name for Chocolatey | `""` | publish-chocolatey.yml |
+| `scoop-alt-name` | Alternative manifest name for Scoop | `""` | publish-scoop.yml |
+| `apt-alt-name` | Alternative package name for apt repo | `""` | publish-apt.yml |
+| `rpm-alt-name` | Alternative package name for rpm repo | `""` | publish-rpm.yml |
 
 ## GPG Key Rotation
 

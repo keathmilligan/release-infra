@@ -39,6 +39,11 @@ on:
         description: Homebrew tap repository (owner/repo)
         required: true
         type: string
+      homebrew-alt-name:
+        description: Alternative formula name for Homebrew (if name is taken)
+        required: false
+        type: string
+        default: ""
     secrets:
       HOMEBREW_TAP_TOKEN:
         required: false
@@ -79,8 +84,9 @@ jobs:
         id: check
         working-directory: tap
         run: |
-          if [ -f "Formula/${{ inputs.project-name }}.rb" ]; then
-            CURRENT_VERSION=$(grep -o 'version "[^"]*"' "Formula/${{ inputs.project-name }}.rb" | head -1 | grep -o '"[^"]*"' | tr -d '"')
+          FORMULA_NAME="${{ inputs.homebrew-alt-name || inputs.project-name }}"
+          if [ -f "Formula/${FORMULA_NAME}.rb" ]; then
+            CURRENT_VERSION=$(grep -o 'version "[^"]*"' "Formula/${FORMULA_NAME}.rb" | head -1 | grep -o '"[^"]*"' | tr -d '"')
             if [ "$CURRENT_VERSION" = "${{ inputs.version }}" ]; then
               echo "Formula already at version ${{ inputs.version }}, skipping update"
               echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -93,11 +99,12 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: |
           BINARY="${{ inputs.binary-name || inputs.project-name }}"
-          # Convert project name to Ruby class name (PascalCase)
-          CLASS_NAME=$(echo "${{ inputs.project-name }}" | sed -r 's/(^|[-_])([a-z])/\U\2/g')
+          FORMULA_NAME="${{ inputs.homebrew-alt-name || inputs.project-name }}"
+          # Convert formula name to Ruby class name (PascalCase)
+          CLASS_NAME=$(echo "$FORMULA_NAME" | sed -r 's/(^|[-_])([a-z])/\U\2/g')
 
           mkdir -p tap/Formula
-          cat > "tap/Formula/${{ inputs.project-name }}.rb" << FORMULA_EOF
+          cat > "tap/Formula/${FORMULA_NAME}.rb" << FORMULA_EOF
           # typed: false
           # frozen_string_literal: true
 
@@ -140,15 +147,17 @@ jobs:
       - name: Validate formula
         if: steps.check.outputs.skip != 'true'
         run: |
-          brew audit --new-formula "tap/Formula/${{ inputs.project-name }}.rb" || true
-          brew style "tap/Formula/${{ inputs.project-name }}.rb" || true
+          FORMULA_NAME="${{ inputs.homebrew-alt-name || inputs.project-name }}"
+          brew audit --new-formula "tap/Formula/${FORMULA_NAME}.rb" || true
+          brew style "tap/Formula/${FORMULA_NAME}.rb" || true
 
       - name: Commit and push
         if: steps.check.outputs.skip != 'true'
         working-directory: tap
         run: |
+          FORMULA_NAME="${{ inputs.homebrew-alt-name || inputs.project-name }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "Formula/${{ inputs.project-name }}.rb"
-          git commit -m "Update ${{ inputs.project-name }} to ${{ inputs.version }}" || echo "Nothing to commit"
+          git add "Formula/${FORMULA_NAME}.rb"
+          git commit -m "Update ${FORMULA_NAME} to ${{ inputs.version }}" || echo "Nothing to commit"
           git push || echo "Nothing to push"

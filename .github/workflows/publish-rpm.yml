@@ -15,6 +15,11 @@ on:
         description: Packages repository (owner/repo) that hosts the apt/rpm repos via GitHub Pages
         required: true
         type: string
+      rpm-alt-name:
+        description: Alternative package name for rpm repo (if name is taken)
+        required: false
+        type: string
+        default: ""
     secrets:
       PACKAGES_REPO_TOKEN:
         required: false
@@ -50,5 +55,6 @@ jobs:
               "project": "${{ inputs.project-name }}",
               "version": "${{ inputs.version }}",
               "repo": "${{ github.repository }}",
-              "run_id": "${{ github.run_id }}"
+              "run_id": "${{ github.run_id }}",
+              "alt_name": "${{ inputs.rpm-alt-name }}"
             }

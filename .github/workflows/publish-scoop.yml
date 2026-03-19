@@ -35,6 +35,11 @@ on:
         description: Scoop bucket repository (owner/repo)
         required: true
         type: string
+      scoop-alt-name:
+        description: Alternative manifest name for Scoop (if name is taken)
+        required: false
+        type: string
+        default: ""
     secrets:
       SCOOP_BUCKET_TOKEN:
         required: false
@@ -73,8 +78,9 @@ jobs:
         id: check
         working-directory: bucket-repo
         run: |
-          if [ -f "bucket/${{ inputs.project-name }}.json" ]; then
-            CURRENT_VERSION=$(jq -r '.version' "bucket/${{ inputs.project-name }}.json")
+          MANIFEST_NAME="${{ inputs.scoop-alt-name || inputs.project-name }}"
+          if [ -f "bucket/${MANIFEST_NAME}.json" ]; then
+            CURRENT_VERSION=$(jq -r '.version' "bucket/${MANIFEST_NAME}.json")
             if [ "$CURRENT_VERSION" = "${{ inputs.version }}" ]; then
               echo "Manifest already at version ${{ inputs.version }}, skipping update"
               echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -87,8 +93,9 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         run: |
           BINARY="${{ inputs.binary-name || inputs.project-name }}"
+          MANIFEST_NAME="${{ inputs.scoop-alt-name || inputs.project-name }}"
           mkdir -p bucket-repo/bucket
-          cat > "bucket-repo/bucket/${{ inputs.project-name }}.json" << EOF
+          cat > "bucket-repo/bucket/${MANIFEST_NAME}.json" << EOF
           {
             "version": "${{ inputs.version }}",
             "description": "${{ inputs.description }}",
@@ -129,8 +136,9 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         working-directory: bucket-repo
         run: |
+          MANIFEST_NAME="${{ inputs.scoop-alt-name || inputs.project-name }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "bucket/${{ inputs.project-name }}.json"
-          git commit -m "Update ${{ inputs.project-name }} to ${{ inputs.version }}" || echo "Nothing to commit"
+          git add "bucket/${MANIFEST_NAME}.json"
+          git commit -m "Update ${MANIFEST_NAME} to ${{ inputs.version }}" || echo "Nothing to commit"
           git push || echo "Nothing to push"
