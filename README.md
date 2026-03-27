@@ -2,7 +2,7 @@
 
 Shared reusable GitHub Actions workflows for cross-platform building, signing, and publishing CLI tools.
 
-A tag push (`v*`) on any adopting repository triggers a complete build-sign-package-publish pipeline. Each distribution channel is independent and opt-in.
+Adopting repositories use two caller workflows: `release.yml` handles version bumping and tag creation, and `publish.yml` orchestrates the full build-sign-package-publish pipeline triggered by the resulting tag. Each distribution channel is independent and opt-in.
 
 ## Table of Contents
 
@@ -32,13 +32,14 @@ A tag push (`v*`) on any adopting repository triggers a complete build-sign-pack
 
 | Workflow | Purpose |
 |----------|--------|
-| `release.yml` | **Orchestrator** — composes all workflows below |
+| `release.yml` | **Release preparer** — validates semver, bumps `Cargo.toml`/`Cargo.lock`, commits, and pushes the tag |
+| `publish.yml` | **Publish orchestrator** — composes all workflows below, triggered by the tag push |
 | `build-rust.yml` | Cross-compile Rust for target matrix |
 | `build-node.yml` | Build JS/TS projects |
 | `sign-windows.yml` | Azure Trusted Signing |
 | `sign-macos.yml` | Apple codesign + notarytool |
 | `release-github.yml` | Create GitHub Release with archives + SHA256SUMS |
-| `publish-cargo.yml` | `cargo publish` to crates.io |
+| `publish-cargo.yml` | `cargo publish` to crates.io (opt-in via `enable-cargo`) |
 | `publish-npm.yml` | `npm publish` to npm |
 | `publish-homebrew.yml` | Generate formula, push to tap repo |
 | `publish-scoop.yml` | Generate manifest, push to bucket repo |
@@ -411,20 +412,48 @@ No additional secrets or variables are needed beyond those already required for 
 
 ## Per-Project Adoption
 
-### 1. Create the caller workflow
+### 1. Create the caller workflows
 
-Add `.github/workflows/release.yml` to your project:
+Adopting repositories need two caller workflows.
+
+**`.github/workflows/release.yml`** — triggered manually to bump the version and create the tag:
 
 ```yaml
 name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to create (e.g. v1.2.3)
+        required: true
+      force:
+        description: Skip version increment validation (use for re-releases)
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    uses: <your-org>/release-infra/.github/workflows/release.yml@v1
+    with:
+      tag: ${{ inputs.tag }}
+      force: ${{ inputs.force == 'true' }}
+      package-name: myproject
+    secrets: inherit
+```
+
+**`.github/workflows/publish.yml`** — triggered by the tag push to run the full pipeline:
+
+```yaml
+name: Publish
 
 on:
   push:
     tags: ["v*"]
 
 jobs:
-  release:
-    uses: <your-org>/release-infra/.github/workflows/release.yml@v1
+  publish:
+    uses: <your-org>/release-infra/.github/workflows/publish.yml@v1
     with:
       project-name: myproject
       binary-name: myproject
@@ -438,6 +467,7 @@ jobs:
       tap-repo: <your-org>/homebrew-tap
       bucket-repo: <your-org>/scoop-bucket
       packages-repo: <your-org>/packages
+      enable-cargo: true
       enable-homebrew: true
       enable-scoop: true
       enable-msi: false
@@ -486,12 +516,13 @@ Add the [secrets](#secrets-reference) for the channels you enable.
 
 ### 5. Release
 
+Trigger the `Release` workflow from the GitHub Actions UI (or `gh` CLI), providing the target version tag:
+
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+gh workflow run release.yml -f tag=v1.0.0
 ```
 
-The pipeline handles everything from there.
+The `release.yml` workflow validates the version increment, bumps `Cargo.toml` and `Cargo.lock`, commits, and pushes the tag. The tag push then triggers `publish.yml`, which runs the full build-sign-package-publish pipeline.
 
 ## Secrets Reference
 
@@ -511,7 +542,7 @@ All secrets are configured on the **project repository** (or organization) and f
 | `APPLE_API_ISSUER` | macOS targets | Issuer ID UUID from App Store Connect |
 | `APPLE_API_KEY_ID` | macOS targets | Key ID from App Store Connect |
 | `APPLE_API_KEY_CONTENT` | macOS targets | Contents of the `.p8` API key file |
-| `CARGO_REGISTRY_TOKEN` | `project-type: rust` | crates.io > Account > API Tokens |
+| `CARGO_REGISTRY_TOKEN` | `enable-cargo` | crates.io > Account > API Tokens |
 | `NPM_TOKEN` | `project-type: node` | npmjs.com > Account > Access Tokens |
 | `HOMEBREW_TAP_TOKEN` | `enable-homebrew` | GitHub fine-grained PAT (Contents: RW on tap repo) |
 | `SCOOP_BUCKET_TOKEN` | `enable-scoop` | GitHub fine-grained PAT (Contents: RW on bucket repo) |
@@ -643,10 +674,12 @@ The packages repository must already be configured (see [section 9](#9-self-host
 
 ### Usage example
 
+Add `enable-badges: true` to your `publish.yml` caller workflow:
+
 ```yaml
 jobs:
-  release:
-    uses: <your-org>/release-infra/.github/workflows/release.yml@v1
+  publish:
+    uses: <your-org>/release-infra/.github/workflows/publish.yml@v1
     with:
       project-name: mytool
       binary-name: mytool
