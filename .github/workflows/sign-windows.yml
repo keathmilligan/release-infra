@@ -61,28 +61,21 @@ jobs:
             exit 1
           fi
 
-      - name: Install trusted-signing-cli
-        shell: pwsh
-        run: |
-          $version = "0.8.0"
-          $url = "https://github.com/Levminer/trusted-signing-cli/releases/download/$version/trusted-signing-cli.exe"
-          $dest = "$env:RUNNER_TEMP\trusted-signing-cli.exe"
-          Invoke-WebRequest -Uri $url -OutFile $dest
-          echo "$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - name: Sign binary
-        shell: bash
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        run: >-
-          trusted-signing-cli
-          -e ${{ secrets.AZURE_SIGNING_ENDPOINT }}
-          -a ${{ secrets.AZURE_SIGNING_ACCOUNT }}
-          -c ${{ secrets.AZURE_CERT_PROFILE }}
-          -d ${{ inputs.binary-name }}
-          "unsigned/${{ inputs.binary-name }}.exe"
+        uses: Azure/artifact-signing-action@v1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files-folder: ${{ github.workspace }}\unsigned
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: ${{ inputs.binary-name }}
 
       - name: Upload signed binary
         uses: actions/upload-artifact@v4

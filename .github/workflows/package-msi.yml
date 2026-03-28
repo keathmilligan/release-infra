@@ -57,28 +57,20 @@ jobs:
       - name: Build MSI
         run: cargo wix --no-build --nocapture -I dist/wix/main.wxs --install-version ${{ inputs.version }} -o "${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
 
-      - name: Install trusted-signing-cli
-        shell: pwsh
-        run: |
-          $version = "0.8.0"
-          $url = "https://github.com/Levminer/trusted-signing-cli/releases/download/$version/trusted-signing-cli.exe"
-          $dest = "$env:RUNNER_TEMP\trusted-signing-cli.exe"
-          Invoke-WebRequest -Uri $url -OutFile $dest
-          echo "$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - name: Sign MSI
-        shell: bash
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        run: >-
-          trusted-signing-cli
-          -e ${{ secrets.AZURE_SIGNING_ENDPOINT }}
-          -a ${{ secrets.AZURE_SIGNING_ACCOUNT }}
-          -c ${{ secrets.AZURE_CERT_PROFILE }}
-          -d ${{ inputs.project-name }}
-          "${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
+        uses: Azure/artifact-signing-action@v1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERT_PROFILE }}
+          files: ${{ github.workspace }}\${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          description: ${{ inputs.project-name }}
 
       - name: Upload MSI to release
         uses: softprops/action-gh-release@v2
