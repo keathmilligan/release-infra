@@ -424,9 +424,30 @@ jobs:
     secrets: inherit
 
   # ─── Publish per-channel badge SVGs ─────────────────────────────
+  # Badges must run AFTER all packaging/publish jobs so that release
+  # assets (DMG, MSI, deb, rpm, install scripts) are already uploaded
+  # when the badge generator checks for them.
   publish-badges:
-    needs: [prepare, release]
-    if: inputs.enable-badges && needs.release.result == 'success'
+    needs:
+      - prepare
+      - release
+      - package-dmg
+      - package-msi
+      - package-linux
+      - publish-apt
+      - publish-rpm
+      - publish-cargo
+      - publish-npm
+      - publish-homebrew
+      - publish-scoop
+      - publish-chocolatey
+      - publish-winget
+      - publish-aur
+      - publish-install-scripts
+    if: |
+      always() &&
+      inputs.enable-badges &&
+      needs.release.result == 'success'
     uses: ./.github/workflows/publish-badges.yml
     with:
       project-name: ${{ inputs.project-name }}
