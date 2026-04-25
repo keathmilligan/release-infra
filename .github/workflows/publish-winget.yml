@@ -53,6 +53,24 @@ jobs:
             echo "skip=false" >> $env:GITHUB_OUTPUT
           }
 
+      - name: Sync winget-pkgs fork
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PAT }}
+        run: |
+          # Determine the fork owner from the PAT
+          $owner = (gh api user --jq .login)
+          $fork = "$owner/winget-pkgs"
+          # Check if the fork exists; if not, wingetcreate will create it
+          $exists = gh repo view $fork --json name 2>$null
+          if ($exists) {
+            Write-Host "Syncing fork $fork with microsoft/winget-pkgs..."
+            gh repo sync $fork --source microsoft/winget-pkgs --force
+            Write-Host "Fork synced successfully."
+          } else {
+            Write-Host "Fork $fork does not exist yet; wingetcreate will create it."
+          }
+
       - name: Submit manifest
         if: steps.check.outputs.skip != 'true'
         run: |
