@@ -224,6 +224,7 @@ jobs:
     if: inputs.project-type == 'rust'
     uses: ./.github/workflows/build-rust.yml
     with:
+      ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
       binary-name: ${{ inputs.binary-name }}
       targets: ${{ inputs.targets }}
       _target-matrix: ${{ needs.prepare.outputs.target-matrix }}
@@ -233,6 +234,7 @@ jobs:
     if: inputs.project-type == 'node'
     uses: ./.github/workflows/build-node.yml
     with:
+      ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
       project-name: ${{ inputs.project-name }}
       node-version: ${{ inputs.node-version }}
 

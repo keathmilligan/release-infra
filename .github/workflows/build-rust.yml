@@ -11,6 +11,11 @@ on:
         description: Comma-separated list of Rust target triples
         required: true
         type: string
+      ref:
+        description: Git ref to checkout (tag, branch, or SHA). Defaults to the triggering ref.
+        required: false
+        type: string
+        default: ""
       extra-build-args:
         description: Additional arguments to pass to cargo build
         required: false
@@ -34,6 +39,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

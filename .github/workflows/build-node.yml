@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: "npm run build"
+      ref:
+        description: Git ref to checkout (tag, branch, or SHA). Defaults to the triggering ref.
+        required: false
+        type: string
+        default: ""
       package-manager:
         description: Package manager (npm, pnpm, yarn)
         required: false
@@ -30,6 +35,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
