@@ -1,6 +1,6 @@
 # release-infra
 
-Shared reusable GitHub Actions workflows for cross-platform building, signing, and publishing CLI tools.
+Shared reusable GitHub Actions workflows for cross-platform building, signing, and publishing software with a broad variety of installation methods including signed/notarized Windows/MacOS installers, Linux package managers, Homebrew, WinGet and others.
 
 Adopting repositories use two caller workflows: `release.yml` handles version bumping and tag creation, and `publish.yml` orchestrates the full build-sign-package-publish pipeline triggered by the resulting tag. Each distribution channel is independent and opt-in.
 
@@ -69,7 +69,7 @@ Adopting repositories use two caller workflows: `release.yml` handles version bu
 
 ## Prerequisites
 
-Only set up the services for the channels you plan to enable. The core build and GitHub Release pipeline requires no external accounts.
+Only set up the services for the channels you plan to enable and insure the following prequisites are met for each. You do not need to configure channels you don't intend to use. The core build and GitHub Release pipeline requires no external accounts.
 
 ### 1. Windows Code Signing (Azure Trusted Signing)
 
@@ -269,14 +269,58 @@ Chocolatey packages the portable `.exe` ZIP — no MSI is required. `enable-choc
 **Required for:** `publish-winget.yml`
 **Cost:** Free
 
-1. You need a GitHub account (used to fork and submit PRs to `microsoft/winget-pkgs`).
+winget is Microsoft's official package manager for Windows 10/11. Unlike Homebrew or Scoop, you do **not** host your own repository — package manifests live in the central community repository [`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs), and every release is submitted as a pull request that passes automated validation before merging.
+
+#### Create the WINGET_PAT token
+
+1. You need a GitHub account (used to fork and submit PRs to `microsoft/winget-pkgs`). The token's owning account is the one under which the fork is created and the PR is opened.
 2. Go to GitHub > **Settings** > **Developer settings** > **Personal access tokens** > **Tokens (classic)**.
-3. Create a token with `public_repo` scope (required to fork and PR to the public `winget-pkgs` repo).
+3. Create a token with the `public_repo` scope (required to fork and PR to the public `winget-pkgs` repo). Use a **classic** token — fine-grained tokens are not reliable with `wingetcreate`'s fork-and-PR flow.
 4. Copy the token — this is `WINGET_PAT`.
 
-The workflow uses `wingetcreate` to automatically generate a manifest and submit a PR to `microsoft/winget-pkgs`. The PR goes through automated validation before merging.
+#### Set the package ID prefix
 
-winget uses portable `.exe` installers and does not require an MSI — the `publish-winget.yml` workflow submits a manifest directly using `wingetcreate`. No `enable-msi` flag is needed for winget alone.
+The winget package identifier follows the form `Publisher.Package`. By default the workflow builds it as `<WINGET_ID_PREFIX>.<project-name>`, so set the `WINGET_ID_PREFIX` repository (or organization) variable to your publisher segment (e.g. `JaneDoe`). To control casing or use a multi-segment ID, pass an explicit `winget-id` input to `publish-winget.yml`, which overrides the prefix-based construction.
+
+#### First submission must be done manually
+
+> [!IMPORTANT]
+> The `publish-winget.yml` workflow uses `wingetcreate update`, which **only works for packages that already exist in `microsoft/winget-pkgs`**. The very first version of a brand-new package has no existing manifest to update, so the automated job will fail with an error like `repos/microsoft/winget-pkgs/.../<p>/<publisher>/<package> was not found`. You must publish the **initial** version manually, once. Every subsequent release is then handled automatically by the workflow.
+
+The `new` command of `wingetcreate` is **interactive by design** — it has no `--version`/`--urls`/`--submit` flags and prompts for required metadata — so it cannot be reliably automated in CI. Run it once from your workstation:
+
+1. Cut the release as normal (`gh workflow run release.yml -f tag=v1.0.0`). Let the pipeline build, sign, and publish the GitHub Release with the Windows ZIP archives. The `publish-winget` job will fail on this first run — that is expected.
+2. On a Windows machine, download `wingetcreate`:
+   ```powershell
+   Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+   ```
+3. Run the interactive `new` command, passing the release ZIP URLs as positional arguments and a classic PAT with `public_repo` scope (the same value as `WINGET_PAT`):
+   ```powershell
+   $version = "1.0.0"
+   $repo    = "<your-org>/<project>"
+   $x64Url   = "https://github.com/$repo/releases/download/v$version/<project>-$version-x86_64-pc-windows-msvc.zip"
+   $arm64Url = "https://github.com/$repo/releases/download/v$version/<project>-$version-aarch64-pc-windows-msvc.zip"
+   .\wingetcreate.exe new $x64Url $arm64Url --token <your_WINGET_PAT>
+   ```
+4. When prompted, set the **PackageIdentifier** to your `Publisher.Package` ID (must match the `<WINGET_ID_PREFIX>.<project-name>` the workflow will use, or the explicit `winget-id` you pass). Because the URLs come from a GitHub release and you supplied a token, `wingetcreate` auto-fills `License`, `ShortDescription`, `PackageUrl`, publisher URLs, and tags from the repo. Accept or edit the remaining fields (`Publisher`, `PackageName`, `Commands`, etc.).
+5. At the final prompt, choose **yes** to submit. This forks `microsoft/winget-pkgs` under the token's account, creates a version branch, and opens the PR.
+6. Wait for Microsoft's automated validation to pass and the PR to merge. Once the package exists in `winget-pkgs`, all future releases are submitted automatically by `publish-winget.yml` via `wingetcreate update`.
+
+#### How it works (subsequent releases)
+
+1. The workflow runs on a `windows-latest` runner and downloads `wingetcreate`.
+2. It checks `microsoft/winget-pkgs` for an existing open or merged PR for the exact package ID + version and **skips submission if one is found**, making re-runs idempotent.
+3. It syncs (or lets `wingetcreate` create) your personal `winget-pkgs` fork.
+4. It runs `wingetcreate update`, pointing at the release ZIP URLs for x64 (`x86_64-pc-windows-msvc`) and arm64 (`aarch64-pc-windows-msvc`), then submits the PR.
+5. Microsoft's automated validation checks the manifest and installer; once it passes, the PR merges and `winget install <Publisher.Package>` works for all users.
+
+#### Notes
+
+- winget consumes the portable `.exe` ZIP archives already produced by the build pipeline — **no MSI is required** and no `enable-msi` flag is needed for winget alone.
+- The `targets` list must include `x86_64-pc-windows-msvc` (and ideally `aarch64-pc-windows-msvc`), since the manifest points at those release archives.
+- No `dist/` packaging config is needed for winget.
+- The **first** submission of a brand-new package must be done manually with `wingetcreate new` (see [First submission must be done manually](#first-submission-must-be-done-manually)); the automated `update`-based job only works once the package already exists in `winget-pkgs`. First-time submissions also take longer to merge while the package establishes a track record; subsequent version updates merge faster.
+- Signed installers are strongly recommended — winget validation is stricter about unsigned binaries and SmartScreen reputation (see [section 1](#1-windows-code-signing-azure-trusted-signing)).
 
 ---
 
@@ -622,6 +666,11 @@ scoop install <project>
 ### Chocolatey (Windows)
 ```powershell
 choco install <project>
+```
+
+### winget (Windows)
+```powershell
+winget install <Publisher.Package>
 ```
 
 ### apt (Debian/Ubuntu)
