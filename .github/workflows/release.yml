@@ -1,5 +1,7 @@
 name: Release
 
+run-name: Release ${{ inputs.tag }}
+
 on:
   workflow_call:
     inputs:
@@ -19,7 +21,6 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 jobs:
   release:
@@ -142,16 +143,6 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "default_branch=$CURRENT_BRANCH" >> "$GITHUB_OUTPUT"
           echo "needs_bump=$([[ "$CURRENT_VERSION" != "$NEW_VERSION" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-
-      - name: Set run title
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.validate.outputs.tag }}
-        run: |
-          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
-            -f name="Release ${TAG}" \
-            && echo "Set run title to 'Release ${TAG}'" \
-            || echo "::warning::Could not update run title"
 
       - name: Update Cargo.toml
         if: steps.validate.outputs.needs_bump == 'true'
