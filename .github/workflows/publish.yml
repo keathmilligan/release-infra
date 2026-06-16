@@ -280,6 +280,7 @@ jobs:
     if: inputs.enable-cargo && needs.release.result == 'success'
     uses: ./.github/workflows/publish-cargo.yml
     with:
+      ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
       cargo-alt-name: ${{ inputs.cargo-alt-name }}
     secrets: inherit
 
