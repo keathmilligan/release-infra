@@ -18,6 +18,16 @@ on:
         description: Package name for cargo update
         required: true
         type: string
+    outputs:
+      version:
+        description: Release version (without v prefix)
+        value: ${{ jobs.release.outputs.version }}
+      tag:
+        description: The tag that was created (e.g. v1.2.3)
+        value: ${{ jobs.release.outputs.tag }}
+      release_sha:
+        description: The exact commit SHA the tag points to (use this for builds/publishing)
+        value: ${{ jobs.release.outputs.release_sha }}
 
 permissions:
   contents: write
@@ -25,6 +35,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.validate.outputs.new_version }}
+      tag: ${{ steps.validate.outputs.tag }}
+      release_sha: ${{ steps.tag.outputs.release_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -194,6 +208,7 @@ jobs:
           echo "Committed and pushed version bump"
 
       - name: Create and push tag
+        id: tag
         env:
           TAG: ${{ steps.validate.outputs.tag }}
           DEFAULT_BRANCH: ${{ steps.validate.outputs.default_branch }}
@@ -202,6 +217,14 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
+
+          # Capture the exact commit SHA the tag points to. Downstream build and
+          # publish jobs must use this immutable SHA rather than re-resolving the
+          # mutable tag ref, which can be moved by a re-release and cause stale
+          # bytes to be built/published (e.g. winget hash mismatches).
+          RELEASE_SHA=$(git rev-list -n1 "$TAG")
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "Tag $TAG points to commit $RELEASE_SHA"
           echo ""
           echo "Done. Tag $TAG pushed — the publish workflow should now be running."
           echo "https://github.com/${{ github.repository }}/actions"

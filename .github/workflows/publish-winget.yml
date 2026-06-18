@@ -42,16 +42,28 @@ jobs:
         run: |
           $id = "${{ steps.id.outputs.winget-id }}"
           $query = "$id version ${{ inputs.version }}"
-          $existing = gh pr list --repo microsoft/winget-pkgs --state open --search "$query" --json number,title --limit 5 | ConvertFrom-Json
-          $closed = gh pr list --repo microsoft/winget-pkgs --state merged --search "$query" --json number,title --limit 5 | ConvertFrom-Json
-          $all = @($existing) + @($closed) | Where-Object { $_.title -match [regex]::Escape($id) -and $_.title -match [regex]::Escape("${{ inputs.version }}") }
-          if ($all.Count -gt 0) {
-            Write-Host "PR already exists for ${id} ${{ inputs.version }}: $($all[0].title) (#$($all[0].number))"
+
+          # A *merged* PR means this version is already published — nothing to do.
+          $merged = gh pr list --repo microsoft/winget-pkgs --state merged --search "$query" --json number,title --limit 5 | ConvertFrom-Json
+          $mergedMatch = @($merged) | Where-Object { $_.title -match [regex]::Escape($id) -and $_.title -match [regex]::Escape("${{ inputs.version }}") }
+          if ($mergedMatch.Count -gt 0) {
+            Write-Host "A merged PR already exists for ${id} ${{ inputs.version }}: $($mergedMatch[0].title) (#$($mergedMatch[0].number)). Skipping."
             echo "skip=true" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+
+          # An *open* PR is NOT a reason to skip. A previous (possibly cancelled
+          # or failed) run may have opened a PR with stale hashes. Re-submitting
+          # with wingetcreate refreshes the existing PR branch with correct
+          # values, so we proceed in that case.
+          $open = gh pr list --repo microsoft/winget-pkgs --state open --search "$query" --json number,title --limit 5 | ConvertFrom-Json
+          $openMatch = @($open) | Where-Object { $_.title -match [regex]::Escape($id) -and $_.title -match [regex]::Escape("${{ inputs.version }}") }
+          if ($openMatch.Count -gt 0) {
+            Write-Host "An open PR already exists for ${id} ${{ inputs.version }}: $($openMatch[0].title) (#$($openMatch[0].number)). Will re-submit to refresh it."
           } else {
             Write-Host "No existing PR found for ${id} ${{ inputs.version }}"
-            echo "skip=false" >> $env:GITHUB_OUTPUT
           }
+          echo "skip=false" >> $env:GITHUB_OUTPUT
 
       - name: Sync winget-pkgs fork
         if: steps.check.outputs.skip != 'true'
@@ -70,6 +82,88 @@ jobs:
           } else {
             Write-Host "Fork $fork does not exist yet; wingetcreate will create it."
           }
+
+      - name: Verify release is published and assets are final
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PAT }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "v${{ inputs.version }}"
+
+          # Fix 3: ensure the GitHub release exists and is fully published (not a
+          # draft). A cancelled/partial run must not be able to submit winget
+          # manifests for assets that never became the final release.
+          $release = gh release view $tag `
+            --repo ${{ github.repository }} `
+            --json isDraft,isPrerelease,publishedAt,assets 2>$null | ConvertFrom-Json
+          if (-not $release) {
+            Write-Error "Release $tag not found for ${{ github.repository }}."
+            exit 1
+          }
+          if ($release.isDraft) {
+            Write-Error "Release $tag is still a draft; refusing to submit winget manifest."
+            exit 1
+          }
+          if (-not $release.publishedAt) {
+            Write-Error "Release $tag has no publishedAt timestamp; refusing to submit."
+            exit 1
+          }
+          Write-Host "Release $tag is published (publishedAt: $($release.publishedAt))."
+
+          # Ensure the Windows .zip assets and the SHA256SUMS file are all present.
+          $required = @(
+            "${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip",
+            "${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.zip",
+            "SHA256SUMS"
+          )
+          $names = $release.assets | ForEach-Object { $_.name }
+          foreach ($r in $required) {
+            if ($names -notcontains $r) {
+              Write-Error "Required release asset '$r' is missing from $tag."
+              exit 1
+            }
+          }
+          Write-Host "All required Windows assets and SHA256SUMS are present."
+
+      - name: Verify installer hashes match published SHA256SUMS
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          $ErrorActionPreference = "Stop"
+          $base = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}"
+
+          # Fix 1: download the live assets plus the release's own SHA256SUMS and
+          # assert the bytes winget will hash match what the release shipped.
+          # This catches the case where a cancelled/earlier build produced
+          # different bytes than the final published release.
+          Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile SHA256SUMS
+
+          # Parse "<hash>  <filename>" lines into a lookup table.
+          $expected = @{}
+          foreach ($line in Get-Content SHA256SUMS) {
+            if ($line -match '^\s*([0-9a-fA-F]{64})\s+\*?(.+?)\s*$') {
+              $expected[$matches[2]] = $matches[1].ToLower()
+            }
+          }
+
+          $assets = @(
+            "${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip",
+            "${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.zip"
+          )
+          foreach ($asset in $assets) {
+            if (-not $expected.ContainsKey($asset)) {
+              Write-Error "SHA256SUMS does not contain an entry for '$asset'."
+              exit 1
+            }
+            Invoke-WebRequest -Uri "$base/$asset" -OutFile $asset
+            $actual = (Get-FileHash -Algorithm SHA256 -Path $asset).Hash.ToLower()
+            if ($actual -ne $expected[$asset]) {
+              Write-Error "Hash mismatch for '$asset': downloaded=$actual expected(SHA256SUMS)=$($expected[$asset]). Aborting winget submission."
+              exit 1
+            }
+            Write-Host "Verified $asset : $actual"
+          }
+          Write-Host "All installer hashes match the published SHA256SUMS."
 
       - name: Submit manifest
         if: steps.check.outputs.skip != 'true'

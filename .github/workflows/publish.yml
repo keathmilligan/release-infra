@@ -21,6 +21,15 @@ on:
         required: false
         type: string
         default: ""
+      ref:
+        description: >-
+          Exact git ref/SHA to check out and build from. Prefer passing the
+          immutable commit SHA produced by the release job (release_sha) so that
+          re-tagging a release cannot cause stale bytes to be built or published.
+          Falls back to the tag, then the triggering ref.
+        required: false
+        type: string
+        default: ""
       targets:
         description: Comma-separated list of Rust target triples
         required: true
@@ -155,7 +164,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+          ref: ${{ inputs.ref != '' && inputs.ref || (inputs.tag != '' && inputs.tag || github.ref) }}
 
       - name: Extract version from tag
         id: version
@@ -224,7 +233,7 @@ jobs:
     if: inputs.project-type == 'rust'
     uses: ./.github/workflows/build-rust.yml
     with:
-      ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+      ref: ${{ inputs.ref != '' && inputs.ref || (inputs.tag != '' && inputs.tag || github.ref) }}
       binary-name: ${{ inputs.binary-name }}
       targets: ${{ inputs.targets }}
       _target-matrix: ${{ needs.prepare.outputs.target-matrix }}
@@ -234,7 +243,7 @@ jobs:
     if: inputs.project-type == 'node'
     uses: ./.github/workflows/build-node.yml
     with:
-      ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+      ref: ${{ inputs.ref != '' && inputs.ref || (inputs.tag != '' && inputs.tag || github.ref) }}
       project-name: ${{ inputs.project-name }}
       node-version: ${{ inputs.node-version }}
 
@@ -280,7 +289,7 @@ jobs:
     if: inputs.enable-cargo && needs.release.result == 'success'
     uses: ./.github/workflows/publish-cargo.yml
     with:
-      ref: ${{ inputs.tag != '' && inputs.tag || github.ref }}
+      ref: ${{ inputs.ref != '' && inputs.ref || (inputs.tag != '' && inputs.tag || github.ref) }}
       cargo-alt-name: ${{ inputs.cargo-alt-name }}
     secrets: inherit
 
