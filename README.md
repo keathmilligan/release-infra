@@ -535,6 +535,50 @@ jobs:
     secrets: inherit
 ```
 
+#### Chaining release and publish in a single workflow
+
+Instead of the two-workflow model above (where `publish.yml` is triggered by the tag push and reads the version from the pushed tag ref), you can chain both jobs in **one** `workflow_dispatch` run. This is convenient and lets you build from the exact commit the release job tagged.
+
+> [!IMPORTANT]
+> When chaining, you **must forward the release job's `tag` output** to the `publish` job. The `publish` orchestrator derives the release version from the tag; in a chained `workflow_call` run `GITHUB_REF` is the branch ref (e.g. `refs/heads/master`), **not** the tag, so without `tag:` the version cannot be resolved and the run will fail fast. Also forward `release_sha` as `ref` so the build uses the exact tagged commit.
+
+```yaml
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to create (e.g. v1.2.3)
+        required: true
+      force:
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    uses: <your-org>/release-infra/.github/workflows/release.yml@v1
+    with:
+      tag: ${{ inputs.tag }}
+      force: ${{ inputs.force }}
+      project-type: go
+
+  publish:
+    needs: release
+    uses: <your-org>/release-infra/.github/workflows/publish.yml@v1
+    with:
+      tag: ${{ needs.release.outputs.tag }}        # REQUIRED when chaining
+      ref: ${{ needs.release.outputs.release_sha }} # build the exact tagged commit
+      project-name: myproject
+      binary-name: myproject
+      project-type: go
+      # ... remaining inputs as above
+    secrets: inherit
+```
+
 #### Go projects
 
 Set `project-type: go` in both caller workflows. Go projects differ from Rust/Node in a few ways:

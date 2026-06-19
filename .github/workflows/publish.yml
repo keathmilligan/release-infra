@@ -180,16 +180,53 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref != '' && inputs.ref || (inputs.tag != '' && inputs.tag || github.ref) }}
+          # Fetch full history + tags so the version can be recovered from the
+          # checked-out commit via `git describe` when no explicit tag input is
+          # provided (e.g. chained release -> publish workflow_dispatch runs
+          # where GITHUB_REF is a branch ref, not a tag).
+          fetch-depth: 0
 
       - name: Extract version from tag
         id: version
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [[ -n "${{ inputs.tag }}" ]]; then
-            TAG="${{ inputs.tag }}"
-          else
+          set -euo pipefail
+
+          # Resolve the tag from, in order of preference:
+          #   1. The explicit `tag` input (best — pass needs.release.outputs.tag).
+          #   2. GITHUB_REF when it is a tag ref (tag-push trigger model).
+          #   3. An exact tag pointing at the checked-out commit (chained model
+          #      where `ref` is the release SHA but `tag` was not forwarded).
+          if [[ -n "$INPUT_TAG" ]]; then
+            TAG="$INPUT_TAG"
+            echo "Using tag from input: $TAG"
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
+            echo "Using tag from GITHUB_REF: $TAG"
+          else
+            # Recover an exact semver tag at HEAD.
+            TAG="$(git tag --points-at HEAD | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+            if [[ -n "$TAG" ]]; then
+              echo "Recovered tag from HEAD: $TAG"
+            fi
           fi
+
+          if [[ -z "$TAG" ]]; then
+            echo "::error::Could not determine the release tag. Pass the 'tag' input to publish.yml (e.g. tag: \${{ needs.release.outputs.tag }}), trigger on a tag push, or check out a commit that an exact vX.Y.Z tag points to. GITHUB_REF was '$GITHUB_REF'."
+            exit 1
+          fi
+
           VERSION="${TAG#v}"
+
+          # Fail fast on a malformed version. Without this, a bad value (such as
+          # a branch ref like 'refs/heads/master') silently poisons every
+          # downstream archive name and breaks packaging in confusing ways.
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Resolved version '$VERSION' (from tag '$TAG') is not valid semver (expected X.Y.Z). Ensure the release tag is in the form 'vX.Y.Z' and that the 'tag' input is forwarded from the release job."
+            exit 1
+          fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Extracted version: $VERSION from tag: $TAG"
 
