@@ -79,9 +79,28 @@ jobs:
         if: inputs.project-type != 'rust'
         shell: pwsh
         run: |
-          choco install wixtoolset --version 3.14.1 --yes --no-progress --limit-output
-          $wixBin = "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin"
-          Add-Content -Path $env:GITHUB_PATH -Value $wixBin
+          # WiX v3 is pre-installed on GitHub Actions Windows runners. If not
+          # found, install via chocolatey. Use --allow-downgrade so the
+          # install succeeds even if a newer (or same) version is present.
+          $wixPaths = @(
+            "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin",
+            "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin",
+            "${env:ProgramFiles}\WiX Toolset v3.14\bin",
+            "${env:ProgramFiles}\WiX Toolset v3.11\bin"
+          )
+          $found = $false
+          foreach ($p in $wixPaths) {
+            if (Test-Path "$p\candle.exe") {
+              Add-Content -Path $env:GITHUB_PATH -Value $p
+              Write-Host "Found WiX at: $p"
+              $found = $true
+              break
+            }
+          }
+          if (-not $found) {
+            choco install wixtoolset --version 3.14.1 --allow-downgrade --yes --no-progress --limit-output
+            Add-Content -Path $env:GITHUB_PATH -Value "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin"
+          }
 
       - name: Build MSI (non-Rust)
         if: inputs.project-type != 'rust'

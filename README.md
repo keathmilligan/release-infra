@@ -394,7 +394,15 @@ gpg --armor --export KEY_ID > gpg.key
 |--------|-------|
 | `PACKAGES_REPO_TOKEN` | PAT with dispatch access to the packages repo |
 
-Your project needs a `dist/nfpm.yaml` file for nfpm to build deb/rpm/apk packages. Use `${MAINTAINER}` as the maintainer value — the workflow substitutes it from `vars.MAINTAINER_NAME` and `vars.MAINTAINER_EMAIL` at build time.
+Your project needs a `dist/nfpm.yaml` file for nfpm to build deb/rpm/apk packages. The workflow substitutes the following placeholders at build time:
+
+| Placeholder | Source | Example |
+|-------------|--------|---------|
+| `${MAINTAINER}` | `vars.MAINTAINER_NAME` + `vars.MAINTAINER_EMAIL` | `Jane Doe <jane@example.com>` |
+| `{{PROJECT_NAME}}` | `project-name` input | `myapp` |
+| `{{BINARY_NAME}}` | `binary-name` input | `myapp` |
+| `{{VERSION}}` | Release version | `1.2.3` |
+| `{{ARCH}}` | Per-target nfpm arch | `amd64`, `arm64` |
 
 ---
 
