@@ -114,7 +114,7 @@ jobs:
             -d"Version=${{ inputs.version }}" `
             -d"ProjectName=${{ inputs.project-name }}" `
             -out main.wixobj
-          light.exe main.wixobj -out "${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
+          light.exe main.wixobj -ext WixUIExtension -out "${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
 
       # ─── Common: sign and upload ───────────────────────────────
       - name: Sign MSI

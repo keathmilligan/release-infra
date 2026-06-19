@@ -95,7 +95,7 @@ jobs:
           sed -i "s|\${MAINTAINER}|${MAINTAINER}|g" dist/nfpm.yaml
           sed -i "s|{{VERSION}}|${{ inputs.version }}|g; s|\${VERSION}|${{ inputs.version }}|g" dist/nfpm.yaml
           sed -i "s|{{ARCH}}|${{ matrix.nfpm-arch }}|g; s|\${ARCH}|${{ matrix.nfpm-arch }}|g" dist/nfpm.yaml
-          sed -i "s|{{BINARY_NAME}}|${{ inputs.binary-name }}|g; s|\${BINARY}|${{ inputs.binary-name }}|g" dist/nfpm.yaml
+          sed -i "s|{{BINARY_NAME}}|packaging/${{ inputs.binary-name }}|g; s|\${BINARY}|packaging/${{ inputs.binary-name }}|g" dist/nfpm.yaml
           sed -i "s|{{PROJECT_NAME}}|${{ inputs.project-name }}|g" dist/nfpm.yaml
 
       - name: Build deb package
