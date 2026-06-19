@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       project-type:
-        description: "Project type: rust or node"
+        description: "Project type: rust, go, or node"
         required: true
         type: string
         default: rust
@@ -39,6 +39,21 @@ on:
         required: false
         type: string
         default: "20"
+      go-version:
+        description: Go version (for go projects)
+        required: false
+        type: string
+        default: "stable"
+      go-main-package:
+        description: Package path to build for go projects (e.g. "." or "./cmd/app")
+        required: false
+        type: string
+        default: "."
+      go-version-var:
+        description: Fully-qualified variable to receive the version via -ldflags -X (go projects)
+        required: false
+        type: string
+        default: "main.version"
       # ─── Distribution repo references ──────────────────────────────
       tap-repo:
         description: Homebrew tap repository (owner/repo)
@@ -238,6 +253,20 @@ jobs:
       targets: ${{ inputs.targets }}
       _target-matrix: ${{ needs.prepare.outputs.target-matrix }}
 
+  build-go:
+    needs: prepare
+    if: inputs.project-type == 'go'
+    uses: ./.github/workflows/build-go.yml
+    with:
+      ref: ${{ inputs.ref != '' && inputs.ref || (inputs.tag != '' && inputs.tag || github.ref) }}
+      binary-name: ${{ inputs.binary-name }}
+      targets: ${{ inputs.targets }}
+      version: ${{ needs.prepare.outputs.version }}
+      go-version: ${{ inputs.go-version }}
+      main-package: ${{ inputs.go-main-package }}
+      version-var: ${{ inputs.go-version-var }}
+      _target-matrix: ${{ needs.prepare.outputs.target-matrix }}
+
   build-node:
     needs: prepare
     if: inputs.project-type == 'node'
@@ -249,8 +278,11 @@ jobs:
 
   # ─── Sign ────────────────────────────────────────────────────────
   sign-windows:
-    needs: [prepare, build-rust]
-    if: always() && needs.build-rust.result == 'success' && needs.prepare.outputs.has-windows-targets == 'true'
+    needs: [prepare, build-rust, build-go]
+    if: |
+      always() &&
+      (needs.build-rust.result == 'success' || needs.build-go.result == 'success') &&
+      needs.prepare.outputs.has-windows-targets == 'true'
     uses: ./.github/workflows/sign-windows.yml
     with:
       binary-name: ${{ inputs.binary-name }}
@@ -258,8 +290,11 @@ jobs:
     secrets: inherit
 
   sign-macos:
-    needs: [prepare, build-rust]
-    if: always() && needs.build-rust.result == 'success' && needs.prepare.outputs.has-macos-targets == 'true'
+    needs: [prepare, build-rust, build-go]
+    if: |
+      always() &&
+      (needs.build-rust.result == 'success' || needs.build-go.result == 'success') &&
+      needs.prepare.outputs.has-macos-targets == 'true'
     uses: ./.github/workflows/sign-macos.yml
     with:
       binary-name: ${{ inputs.binary-name }}
@@ -268,10 +303,10 @@ jobs:
 
   # ─── Release ─────────────────────────────────────────────────────
   release:
-    needs: [prepare, build-rust, sign-windows, sign-macos]
+    needs: [prepare, build-rust, build-go, sign-windows, sign-macos]
     if: |
       always() &&
-      needs.build-rust.result == 'success' &&
+      (needs.build-rust.result == 'success' || needs.build-go.result == 'success') &&
       (needs.sign-windows.result == 'success' || needs.sign-windows.result == 'skipped') &&
       (needs.sign-macos.result == 'success' || needs.sign-macos.result == 'skipped')
     permissions:

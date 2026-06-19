@@ -32,9 +32,10 @@ Adopting repositories use two caller workflows: `release.yml` handles version bu
 
 | Workflow | Purpose |
 |----------|--------|
-| `release.yml` | **Release preparer** — validates semver, bumps `Cargo.toml`/`Cargo.lock`, commits, and pushes the tag |
+| `release.yml` | **Release preparer** — validates semver, bumps the version file when applicable (`Cargo.toml`/`Cargo.lock` for Rust), commits, and pushes the tag. Go projects are tag-only (no file bump). |
 | `publish.yml` | **Publish orchestrator** — composes all workflows below, triggered by the tag push |
 | `build-rust.yml` | Cross-compile Rust for target matrix |
+| `build-go.yml` | Cross-compile Go for target matrix (via `GOOS`/`GOARCH`) |
 | `build-node.yml` | Build JS/TS projects |
 | `sign-windows.yml` | Azure Trusted Signing |
 | `sign-macos.yml` | Apple codesign + notarytool |
@@ -482,7 +483,8 @@ jobs:
     with:
       tag: ${{ inputs.tag }}
       force: ${{ inputs.force == 'true' }}
-      package-name: myproject
+      project-type: rust       # "rust", "go", or "node"
+      package-name: myproject  # Rust only — used for `cargo update`; omit for Go/Node
     secrets: inherit
 ```
 
@@ -501,7 +503,7 @@ jobs:
     with:
       project-name: myproject
       binary-name: myproject
-      project-type: rust              # or "node"
+      project-type: rust              # "rust", "go", or "node"
       targets: >-
         x86_64-apple-darwin,
         aarch64-apple-darwin,
@@ -531,6 +533,67 @@ jobs:
       apt-alt-name: ""                # Alternative package name for apt repo
       rpm-alt-name: ""                # Alternative package name for rpm repo
     secrets: inherit
+```
+
+#### Go projects
+
+Set `project-type: go` in both caller workflows. Go projects differ from Rust/Node in a few ways:
+
+- **Tag-only versioning.** Go modules are versioned by git tags, so `release.yml` does **not** bump or commit a version file — it validates the semver increment against the latest existing tag and pushes the new tag directly. Do **not** pass `package-name` (it is only used for the Rust `cargo update`).
+- **Cross-compilation.** `build-go.yml` builds every target on `ubuntu-latest` using `GOOS`/`GOARCH` (no `cross` or platform runners required). It accepts the same Rust-style target triples as the rest of the pipeline (e.g. `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`) and maps them internally. Builds are `CGO_ENABLED=0`, `-trimpath`, with `-ldflags "-s -w"`.
+- **Version injection.** The release version is injected into the binary at build time via `-ldflags -X main.version=<version>`. Override the target variable with `go-version-var` (e.g. `github.com/you/proj/internal/build.Version`).
+- **No `enable-cargo`.** crates.io publishing is Rust-only; leave `enable-cargo: false`. All other channels (Homebrew, Scoop, apt/rpm/apk, AUR, winget, Chocolatey, DMG, install scripts, badges) work unchanged because they consume the GitHub Release archives.
+
+Go-specific inputs for `publish.yml`:
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `go-version` | `stable` | Go toolchain version passed to `actions/setup-go` |
+| `go-main-package` | `.` | Package path to build (e.g. `./cmd/app`) |
+| `go-version-var` | `main.version` | Fully-qualified variable to receive the version via `-ldflags -X` |
+
+Example Go caller workflows:
+
+```yaml
+# .github/workflows/release.yml
+jobs:
+  release:
+    uses: <your-org>/release-infra/.github/workflows/release.yml@v1
+    with:
+      tag: ${{ inputs.tag }}
+      force: ${{ inputs.force == 'true' }}
+      project-type: go
+    secrets: inherit
+```
+
+```yaml
+# .github/workflows/publish.yml
+jobs:
+  publish:
+    uses: <your-org>/release-infra/.github/workflows/publish.yml@v1
+    with:
+      project-name: myproject
+      binary-name: myproject
+      project-type: go
+      go-main-package: ./cmd/myproject
+      targets: >-
+        x86_64-apple-darwin,
+        aarch64-apple-darwin,
+        x86_64-pc-windows-msvc,
+        x86_64-unknown-linux-gnu,
+        aarch64-unknown-linux-gnu
+      enable-homebrew: true
+      enable-apt: true
+      enable-rpm: true
+    secrets: inherit
+```
+
+In your Go entrypoint, declare the variable the version is injected into:
+
+```go
+package main
+
+var version = "dev" // overwritten at release time via -ldflags -X main.version
 ```
 
 ### 2. Set repository variables
@@ -566,7 +629,7 @@ Trigger the `Release` workflow from the GitHub Actions UI (or `gh` CLI), providi
 gh workflow run release.yml -f tag=v1.0.0
 ```
 
-The `release.yml` workflow validates the version increment, bumps `Cargo.toml` and `Cargo.lock`, commits, and pushes the tag. The tag push then triggers `publish.yml`, which runs the full build-sign-package-publish pipeline.
+The `release.yml` workflow validates the version increment, and—for Rust projects—bumps `Cargo.toml` and `Cargo.lock` and commits the change before pushing the tag. Go projects are tag-only: no file is bumped or committed, and the version is recorded by the tag (and injected into the binary at build time). The tag push then triggers `publish.yml`, which runs the full build-sign-package-publish pipeline.
 
 ## Secrets Reference
 
@@ -628,6 +691,15 @@ These optional inputs allow publishing under a different name when the desired p
 | `scoop-alt-name` | Alternative manifest name for Scoop | `""` | publish-scoop.yml |
 | `apt-alt-name` | Alternative package name for apt repo | `""` | publish-apt.yml |
 | `rpm-alt-name` | Alternative package name for rpm repo | `""` | publish-rpm.yml |
+
+### Language-Specific Build Inputs
+
+| Input | Description | Default | Used by |
+|-------|-------------|---------|---------|
+| `node-version` | Node.js toolchain version | `20` | build-node.yml |
+| `go-version` | Go toolchain version (`actions/setup-go`) | `stable` | build-go.yml |
+| `go-main-package` | Package path to build for Go projects | `.` | build-go.yml |
+| `go-version-var` | Variable receiving the version via `-ldflags -X` (Go) | `main.version` | build-go.yml |
 
 ## GPG Key Rotation
 

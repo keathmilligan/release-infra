@@ -1,0 +1,153 @@
+name: Build Go
+
+on:
+  workflow_call:
+    inputs:
+      binary-name:
+        description: Name of the binary to build
+        required: true
+        type: string
+      targets:
+        description: Comma-separated list of Rust-style target triples
+        required: true
+        type: string
+      version:
+        description: Release version (without v prefix), injected via -ldflags
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: Git ref to checkout (tag, branch, or SHA). Defaults to the triggering ref.
+        required: false
+        type: string
+        default: ""
+      go-version:
+        description: Go version to use (or "stable")
+        required: false
+        type: string
+        default: "stable"
+      main-package:
+        description: Package path to build (e.g. "." or "./cmd/app")
+        required: false
+        type: string
+        default: "."
+      ldflags:
+        description: >-
+          Additional ldflags. The version is injected automatically via
+          -X main.version=<version>; use this for extra -X assignments.
+        required: false
+        type: string
+        default: ""
+      version-var:
+        description: Fully-qualified variable to receive the version via -ldflags -X
+        required: false
+        type: string
+        default: "main.version"
+      extra-build-args:
+        description: Additional arguments to pass to go build
+        required: false
+        type: string
+        default: ""
+      _target-matrix:
+        description: Pre-computed JSON matrix from the orchestrator
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build Go / ${{ matrix.target }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include: ${{ fromJSON(inputs._target-matrix) }}
+    # Go cross-compiles natively via GOOS/GOARCH, so every target builds on
+    # ubuntu-latest regardless of the runner the orchestrator selected.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+          cache: true
+
+      - name: Map target triple to GOOS/GOARCH
+        id: platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="${{ matrix.target }}"
+
+          # OS
+          case "$target" in
+            *apple-darwin*) goos="darwin" ;;
+            *windows*)      goos="windows" ;;
+            *linux*)        goos="linux" ;;
+            *)
+              echo "::error::Unsupported target OS in triple: $target"
+              exit 1
+              ;;
+          esac
+
+          # Arch
+          case "$target" in
+            x86_64-*)  goarch="amd64" ;;
+            aarch64-*) goarch="arm64" ;;
+            armv7-*)   goarch="arm"; goarm="7" ;;
+            i686-*)    goarch="386" ;;
+            *)
+              echo "::error::Unsupported target arch in triple: $target"
+              exit 1
+              ;;
+          esac
+
+          # CGO is disabled by default for reproducible, statically linked,
+          # cross-compilable binaries. musl targets also build CGO-free here.
+          echo "goos=$goos" >> "$GITHUB_OUTPUT"
+          echo "goarch=$goarch" >> "$GITHUB_OUTPUT"
+          echo "goarm=${goarm:-}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine binary path
+        id: binary
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            echo "name=${{ inputs.binary-name }}.exe" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ inputs.binary-name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ steps.platform.outputs.goos }}
+          GOARCH: ${{ steps.platform.outputs.goarch }}
+          GOARM: ${{ steps.platform.outputs.goarm }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          ldflags="-s -w"
+          if [[ -n "${{ inputs.version }}" ]]; then
+            ldflags="$ldflags -X '${{ inputs.version-var }}=${{ inputs.version }}'"
+          fi
+          if [[ -n "${{ inputs.ldflags }}" ]]; then
+            ldflags="$ldflags ${{ inputs.ldflags }}"
+          fi
+
+          go build -trimpath -ldflags "$ldflags" ${{ inputs.extra-build-args }} \
+            -o "dist/${{ steps.binary.outputs.name }}" \
+            "${{ inputs.main-package }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: dist/${{ steps.binary.outputs.name }}
+          if-no-files-found: error
+          retention-days: 1
