@@ -106,8 +106,10 @@ jobs:
         if: inputs.project-type != 'rust'
         shell: pwsh
         run: |
-          $binaryPath = (Get-Item "signed\${{ inputs.binary-name }}.exe").FullName
+          $buildDir = (Get-Item "signed").FullName
+          $binaryPath = "$buildDir\${{ inputs.binary-name }}.exe"
           candle.exe dist\wix\main.wxs `
+            -d"BuildDir=$buildDir" `
             -d"BinaryPath=$binaryPath" `
             -d"Version=${{ inputs.version }}" `
             -d"ProjectName=${{ inputs.project-name }}" `
