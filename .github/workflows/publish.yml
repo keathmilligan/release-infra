@@ -422,6 +422,7 @@ jobs:
       project-name: ${{ inputs.project-name }}
       binary-name: ${{ inputs.binary-name }}
       version: ${{ needs.prepare.outputs.version }}
+      project-type: ${{ inputs.project-type }}
     secrets: inherit
 
   # ─── Publish: Chocolatey ─────────────────────────────────────────

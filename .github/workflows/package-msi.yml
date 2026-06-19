@@ -15,6 +15,11 @@ on:
         description: Release version (without v prefix)
         required: true
         type: string
+      project-type:
+        description: "Project type: rust, go, or node"
+        required: false
+        type: string
+        default: rust
     secrets:
       AZURE_TENANT_ID:
         required: false
@@ -42,21 +47,55 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ─── Rust path: cargo-wix ──────────────────────────────────
       - name: Install Rust toolchain
+        if: inputs.project-type == 'rust'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-wix
+        if: inputs.project-type == 'rust'
         run: cargo install cargo-wix --locked
 
-      - name: Download signed Windows binary
+      - name: Download signed Windows binary (Rust)
+        if: inputs.project-type == 'rust'
         uses: actions/download-artifact@v4
         with:
           name: signed-x86_64-pc-windows-msvc
           path: target/release/
 
-      - name: Build MSI
+      - name: Build MSI (Rust)
+        if: inputs.project-type == 'rust'
         run: cargo wix --no-build --nocapture -I dist/wix/main.wxs --install-version ${{ inputs.version }} -o "${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
 
+      # ─── Non-Rust path: WiX toolset directly ──────────────────
+      - name: Download signed Windows binary (non-Rust)
+        if: inputs.project-type != 'rust'
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-x86_64-pc-windows-msvc
+          path: signed/
+
+      - name: Install WiX toolset
+        if: inputs.project-type != 'rust'
+        shell: pwsh
+        run: |
+          choco install wixtoolset --version 3.14.1 --yes --no-progress --limit-output
+          $wixBin = "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin"
+          Add-Content -Path $env:GITHUB_PATH -Value $wixBin
+
+      - name: Build MSI (non-Rust)
+        if: inputs.project-type != 'rust'
+        shell: pwsh
+        run: |
+          $binaryPath = (Get-Item "signed\${{ inputs.binary-name }}.exe").FullName
+          candle.exe dist\wix\main.wxs `
+            -d"BinaryPath=$binaryPath" `
+            -d"Version=${{ inputs.version }}" `
+            -d"ProjectName=${{ inputs.project-name }}" `
+            -out main.wixobj
+          light.exe main.wixobj -out "${{ inputs.project-name }}-${{ inputs.version }}-x86_64.msi"
+
+      # ─── Common: sign and upload ───────────────────────────────
       - name: Sign MSI
         uses: Azure/artifact-signing-action@v1
         with:

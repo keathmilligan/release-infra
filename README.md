@@ -46,7 +46,7 @@ Adopting repositories use two caller workflows: `release.yml` handles version bu
 | `publish-scoop.yml` | Generate manifest, push to bucket repo |
 | `publish-chocolatey.yml` | Build nupkg, push to community repo |
 | `publish-winget.yml` | Generate manifest, PR to winget-pkgs |
-| `package-msi.yml` | Build MSI via cargo-wix, sign (requires `enable-msi: true`) |
+| `package-msi.yml` | Build MSI (Rust: `cargo-wix`, non-Rust: WiX toolset directly), sign (requires `enable-msi: true`) |
 | `package-dmg.yml` | Build DMG, sign, notarize |
 | `package-linux.yml` | nfpm: deb + rpm + apk |
 | `publish-apt.yml` | Add deb to apt repo via dispatch |
@@ -587,6 +587,7 @@ Set `project-type: go` in both caller workflows. Go projects differ from Rust/No
 - **Cross-compilation.** `build-go.yml` builds every target on `ubuntu-latest` using `GOOS`/`GOARCH` (no `cross` or platform runners required). It accepts the same Rust-style target triples as the rest of the pipeline (e.g. `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`) and maps them internally. Builds are `CGO_ENABLED=0`, `-trimpath`, with `-ldflags "-s -w"`.
 - **Version injection.** The release version is injected into the binary at build time via `-ldflags -X main.version=<version>`. Override the target variable with `go-version-var` (e.g. `github.com/you/proj/internal/build.Version`).
 - **No `enable-cargo`.** crates.io publishing is Rust-only; leave `enable-cargo: false`. All other channels (Homebrew, Scoop, apt/rpm/apk, AUR, winget, Chocolatey, DMG, install scripts, badges) work unchanged because they consume the GitHub Release archives.
+- **MSI works for Go too.** `enable-msi: true` produces an MSI installer for Windows using the WiX toolset directly (instead of `cargo-wix`). Your `dist/wix/main.wxs` references the binary via `$(var.BinaryPath)`, `$(var.Version)`, and `$(var.ProjectName)` (see [packaging configs](#3-add-packaging-configs)).
 
 Go-specific inputs for `publish.yml`:
 
@@ -661,7 +662,15 @@ dist/
     └── main.wxs
 ```
 
-### 4. Configure secrets
+The `dist/wix/main.wxs` file is the WiX source template. For **Rust** projects it uses cargo-wix's variable syntax (`$(var.<CrateName>.TargetPath)`). For **non-Rust** projects (Go, Node), the workflow passes these preprocessor variables which you can reference in your `.wxs`:
+
+| Variable | Description | Example value |
+|----------|-------------|---------------|
+| `$(var.BinaryPath)` | Full path to the signed `.exe` | `D:\a\...\signed\myapp.exe` |
+| `$(var.Version)` | Release version | `1.2.3` |
+| `$(var.ProjectName)` | Project name | `myapp` |
+
+#### 4. Configure secrets
 
 Add the [secrets](#secrets-reference) for the channels you enable.
 
