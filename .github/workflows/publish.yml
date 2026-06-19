@@ -358,7 +358,10 @@ jobs:
   # ─── Publish: cargo / npm ────────────────────────────────────────
   publish-cargo:
     needs: [prepare, release]
-    if: inputs.enable-cargo && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.enable-cargo == true
     uses: ./.github/workflows/publish-cargo.yml
     with:
       ref: ${{ inputs.ref != '' && inputs.ref || (inputs.tag != '' && inputs.tag || github.ref) }}
@@ -367,7 +370,10 @@ jobs:
 
   publish-npm:
     needs: [prepare, release]
-    if: inputs.project-type == 'node' && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.project-type == 'node'
     uses: ./.github/workflows/publish-npm.yml
     with:
       npm-alt-name: ${{ inputs.npm-alt-name }}
@@ -376,7 +382,10 @@ jobs:
   # ─── Publish: Homebrew ───────────────────────────────────────────
   publish-homebrew:
     needs: [prepare, release]
-    if: inputs.enable-homebrew && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.enable-homebrew == true
     uses: ./.github/workflows/publish-homebrew.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -389,7 +398,10 @@ jobs:
   # ─── Publish: Scoop ──────────────────────────────────────────────
   publish-scoop:
     needs: [prepare, release]
-    if: inputs.enable-scoop && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.enable-scoop == true
     uses: ./.github/workflows/publish-scoop.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -401,7 +413,10 @@ jobs:
   # ─── Package: MSI ────────────────────────────────────────────────
   package-msi:
     needs: [prepare, release]
-    if: inputs.enable-msi && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.enable-msi == true
     uses: ./.github/workflows/package-msi.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -412,7 +427,10 @@ jobs:
   # ─── Publish: Chocolatey ─────────────────────────────────────────
   publish-chocolatey:
     needs: [prepare, release]
-    if: inputs.enable-chocolatey && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.enable-chocolatey == true
     uses: ./.github/workflows/publish-chocolatey.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -428,7 +446,10 @@ jobs:
   # already present in the winget-pkgs manifest.
   publish-winget:
     needs: [prepare, release]
-    if: inputs.enable-winget && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.enable-winget == true
     uses: ./.github/workflows/publish-winget.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -438,7 +459,10 @@ jobs:
   # ─── Package: DMG ────────────────────────────────────────────────
   package-dmg:
     needs: [prepare, sign-macos]
-    if: inputs.enable-dmg && needs.sign-macos.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.sign-macos.result == 'success' &&
+      inputs.enable-dmg == true
     uses: ./.github/workflows/package-dmg.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -450,7 +474,10 @@ jobs:
   # ─── Package: Linux (deb/rpm/apk) ───────────────────────────────
   package-linux:
     needs: [prepare, release]
-    if: (inputs.enable-apt || inputs.enable-rpm || inputs.enable-apk) && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      (inputs.enable-apt == true || inputs.enable-rpm == true || inputs.enable-apk == true)
     uses: ./.github/workflows/package-linux.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -464,7 +491,10 @@ jobs:
   # ─── Publish: apt ────────────────────────────────────────────────
   publish-apt:
     needs: [prepare, package-linux]
-    if: inputs.enable-apt && needs.package-linux.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.package-linux.result == 'success' &&
+      inputs.enable-apt == true
     uses: ./.github/workflows/publish-apt.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -476,7 +506,10 @@ jobs:
   # ─── Publish: rpm ────────────────────────────────────────────────
   publish-rpm:
     needs: [prepare, package-linux]
-    if: inputs.enable-rpm && needs.package-linux.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.package-linux.result == 'success' &&
+      inputs.enable-rpm == true
     uses: ./.github/workflows/publish-rpm.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -488,7 +521,10 @@ jobs:
   # ─── Publish: AUR ────────────────────────────────────────────────
   publish-aur:
     needs: [prepare, release]
-    if: inputs.enable-aur && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.enable-aur == true
     uses: ./.github/workflows/publish-aur.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -498,7 +534,10 @@ jobs:
   # ─── Publish: Install scripts ────────────────────────────────────
   publish-install-scripts:
     needs: [prepare, release]
-    if: inputs.enable-install-scripts && needs.release.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.enable-install-scripts == true
     uses: ./.github/workflows/publish-install-scripts.yml
     with:
       project-name: ${{ inputs.project-name }}
@@ -529,9 +568,9 @@ jobs:
       - publish-aur
       - publish-install-scripts
     if: |
-      always() &&
-      inputs.enable-badges &&
-      needs.release.result == 'success'
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      inputs.enable-badges == true
     uses: ./.github/workflows/publish-badges.yml
     with:
       project-name: ${{ inputs.project-name }}
