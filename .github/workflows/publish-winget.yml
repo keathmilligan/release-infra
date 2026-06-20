@@ -254,7 +254,8 @@ jobs:
           foreach ($file in Get-ChildItem -Path $targetDir -File -Filter "*.yaml") {
             $content = Get-Content $file.FullName -Raw
             $content = [regex]::Replace($content, '(?m)^(PackageVersion:\s*).+$', "`${1}$version")
-            Set-Content -Path $file.FullName -Value $content -NoNewline
+            $content = $content -replace "\r?\n", "`r`n"
+            [System.IO.File]::WriteAllText($file.FullName, $content, [System.Text.UTF8Encoding]::new($false))
           }
 
           $lines = [System.Collections.Generic.List[string]]::new()
@@ -311,7 +312,7 @@ jobs:
               elseif ($currentArch -eq 'arm64') { $lines[$i] = "  InstallerSha256: $arm64Sha" }
             }
           }
-          Set-Content -Path $installerFile.FullName -Value ($lines -join "`n") -NoNewline
+          [System.IO.File]::WriteAllText($installerFile.FullName, ($lines -join "`r`n"), [System.Text.UTF8Encoding]::new($false))
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -367,7 +368,8 @@ jobs:
           foreach ($file in Get-ChildItem -Path $targetDir -File -Filter "*.yaml") {
             $content = Get-Content $file.FullName -Raw
             $content = [regex]::Replace($content, '(?m)^(PackageVersion:\s*).+$', "`${1}$version")
-            Set-Content -Path $file.FullName -Value $content -NoNewline
+            $content = $content -replace "\r?\n", "`r`n"
+            [System.IO.File]::WriteAllText($file.FullName, $content, [System.Text.UTF8Encoding]::new($false))
           }
 
           $lines = [System.Collections.Generic.List[string]]::new()
@@ -424,7 +426,7 @@ jobs:
               elseif ($currentArch -eq 'arm64') { $lines[$i] = "  InstallerSha256: $arm64Sha" }
             }
           }
-          Set-Content -Path $installerFile.FullName -Value ($lines -join "`n") -NoNewline
+          [System.IO.File]::WriteAllText($installerFile.FullName, ($lines -join "`r`n"), [System.Text.UTF8Encoding]::new($false))
 
           Push-Location winget-pkgs
           git config user.name "github-actions[bot]"
