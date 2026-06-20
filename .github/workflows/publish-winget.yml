@@ -242,26 +242,35 @@ jobs:
           $lines = [System.Collections.Generic.List[string]]::new()
           $currentArch = $null
           foreach ($line in (Get-Content $installerFile.FullName)) {
-            if ($line -match '^- Architecture:\s*(\S+)\s*$') {
+            if ($line -match '^\s*-\s*Architecture:\s*(\S+)\s*$') {
               $currentArch = $matches[1]
               $lines.Add($line)
               continue
             }
-            if ($line -match '^\s*InstallerUrl:') {
-              if ($currentArch -eq 'x64') { $lines.Add("  InstallerUrl: $x64Url") }
-              elseif ($currentArch -eq 'arm64') { $lines.Add("  InstallerUrl: $arm64Url") }
+            if ($line -match '^(\s*)InstallerUrl:') {
+              $indent = $matches[1]
+              if ($currentArch -eq 'x64') { $lines.Add("${indent}InstallerUrl: $x64Url") }
+              elseif ($currentArch -eq 'arm64') { $lines.Add("${indent}InstallerUrl: $arm64Url") }
               else { $lines.Add($line) }
               continue
             }
-            if ($line -match '^\s*InstallerSha256:') {
-              if ($currentArch -eq 'x64') { $lines.Add("  InstallerSha256: $x64Sha") }
-              elseif ($currentArch -eq 'arm64') { $lines.Add("  InstallerSha256: $arm64Sha") }
+            if ($line -match '^(\s*)InstallerSha256:') {
+              $indent = $matches[1]
+              if ($currentArch -eq 'x64') { $lines.Add("${indent}InstallerSha256: $x64Sha") }
+              elseif ($currentArch -eq 'arm64') { $lines.Add("${indent}InstallerSha256: $arm64Sha") }
               else { $lines.Add($line) }
               continue
             }
             $lines.Add($line)
           }
           [System.IO.File]::WriteAllText($installerFile.FullName, ($lines -join "`r`n"), [System.Text.UTF8Encoding]::new($false))
+          $updatedInstaller = Get-Content $installerFile.FullName -Raw
+          foreach ($expectedValue in @($x64Url, $arm64Url, $x64Sha, $arm64Sha)) {
+            if (-not $updatedInstaller.Contains($expectedValue)) {
+              Write-Error "Installer manifest update did not write expected value: $expectedValue"
+              exit 1
+            }
+          }
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -334,26 +343,35 @@ jobs:
           $lines = [System.Collections.Generic.List[string]]::new()
           $currentArch = $null
           foreach ($line in (Get-Content $installerFile.FullName)) {
-            if ($line -match '^- Architecture:\s*(\S+)\s*$') {
+            if ($line -match '^\s*-\s*Architecture:\s*(\S+)\s*$') {
               $currentArch = $matches[1]
               $lines.Add($line)
               continue
             }
-            if ($line -match '^\s*InstallerUrl:') {
-              if ($currentArch -eq 'x64') { $lines.Add("  InstallerUrl: $x64Url") }
-              elseif ($currentArch -eq 'arm64') { $lines.Add("  InstallerUrl: $arm64Url") }
+            if ($line -match '^(\s*)InstallerUrl:') {
+              $indent = $matches[1]
+              if ($currentArch -eq 'x64') { $lines.Add("${indent}InstallerUrl: $x64Url") }
+              elseif ($currentArch -eq 'arm64') { $lines.Add("${indent}InstallerUrl: $arm64Url") }
               else { $lines.Add($line) }
               continue
             }
-            if ($line -match '^\s*InstallerSha256:') {
-              if ($currentArch -eq 'x64') { $lines.Add("  InstallerSha256: $x64Sha") }
-              elseif ($currentArch -eq 'arm64') { $lines.Add("  InstallerSha256: $arm64Sha") }
+            if ($line -match '^(\s*)InstallerSha256:') {
+              $indent = $matches[1]
+              if ($currentArch -eq 'x64') { $lines.Add("${indent}InstallerSha256: $x64Sha") }
+              elseif ($currentArch -eq 'arm64') { $lines.Add("${indent}InstallerSha256: $arm64Sha") }
               else { $lines.Add($line) }
               continue
             }
             $lines.Add($line)
           }
           [System.IO.File]::WriteAllText($installerFile.FullName, ($lines -join "`r`n"), [System.Text.UTF8Encoding]::new($false))
+          $updatedInstaller = Get-Content $installerFile.FullName -Raw
+          foreach ($expectedValue in @($x64Url, $arm64Url, $x64Sha, $arm64Sha)) {
+            if (-not $updatedInstaller.Contains($expectedValue)) {
+              Write-Error "Installer manifest update did not write expected value: $expectedValue"
+              exit 1
+            }
+          }
 
           Push-Location winget-pkgs
           git config user.name "github-actions[bot]"
