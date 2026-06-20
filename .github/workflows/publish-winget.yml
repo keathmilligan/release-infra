@@ -25,10 +25,6 @@ jobs:
     name: Publish winget
     runs-on: windows-latest
     steps:
-      - name: Install wingetcreate
-        run: |
-          Invoke-WebRequest -Uri https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
-
       - name: Determine winget ID
         id: id
         run: |
@@ -182,21 +178,139 @@ jobs:
 
       - name: Submit new manifest PR
         if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PAT }}
         run: |
           if ("${{ steps.check.outputs.open-pr-number }}") {
             Write-Host "Existing PR #${{ steps.check.outputs.open-pr-number }} found; skipping new PR submission."
             exit 0
           }
 
+          $ErrorActionPreference = "Stop"
+          $id = "${{ steps.id.outputs.winget-id }}"
+          $version = "${{ inputs.version }}"
           $x64Url   = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.exe"
           $arm64Url = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.exe"
-          .\wingetcreate.exe update `
-            ${{ steps.id.outputs.winget-id }} `
-            --version ${{ inputs.version }} `
-            --urls "$x64Url|x64" "$arm64Url|arm64" `
-            --prtitle "Update ${{ steps.id.outputs.winget-id }} to ${{ inputs.version }}" `
-            --token ${{ secrets.WINGET_PAT }} `
-            --submit
+          $x64Sha = (Get-FileHash -Algorithm SHA256 -Path "${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.exe").Hash.ToUpper()
+          $arm64Sha = (Get-FileHash -Algorithm SHA256 -Path "${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.exe").Hash.ToUpper()
+
+          $owner = (gh api user --jq .login)
+          $fork = "$owner/winget-pkgs"
+          $branch = "release-infra/$($id.Replace('.', '-'))-$version"
+          gh repo clone $fork winget-pkgs -- --branch master
+          Push-Location winget-pkgs
+          git checkout -B $branch
+
+          $segments = $id.Split('.')
+          $packageDir = Join-Path "manifests" $segments[0].Substring(0, 1).ToLower()
+          foreach ($segment in $segments) {
+            $packageDir = Join-Path $packageDir $segment
+          }
+          if (-not (Test-Path $packageDir)) {
+            Write-Error "Package manifest directory '$packageDir' was not found."
+            exit 1
+          }
+
+          $latestDir = Get-ChildItem -Path $packageDir -Directory |
+            Where-Object { $_.Name -ne $version } |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
+          if (-not $latestDir) {
+            Write-Error "Could not find an existing manifest version to copy for $id."
+            exit 1
+          }
+
+          $targetDir = Join-Path $packageDir $version
+          if (Test-Path $targetDir) {
+            Remove-Item -Recurse -Force $targetDir
+          }
+          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+          Copy-Item -Path (Join-Path $latestDir.FullName "*") -Destination $targetDir -Recurse -Force
+
+          $installerFile = Get-ChildItem -Path $targetDir -File -Filter "*.installer.yaml" | Select-Object -First 1
+          if (-not $installerFile) {
+            Write-Error "Installer manifest was not found in '$targetDir'."
+            exit 1
+          }
+
+          $installerContent = Get-Content $installerFile.FullName -Raw
+          $commandMatch = [regex]::Match($installerContent, '(?m)^\s*PortableCommandAlias:\s*(\S+)\s*$')
+          $command = if ($commandMatch.Success) { $commandMatch.Groups[1].Value } else { "${{ inputs.project-name }}" }
+
+          foreach ($file in Get-ChildItem -Path $targetDir -File -Filter "*.yaml") {
+            $content = Get-Content $file.FullName -Raw
+            $content = [regex]::Replace($content, '(?m)^(PackageVersion:\s*).+$', "`${1}$version")
+            Set-Content -Path $file.FullName -Value $content -NoNewline
+          }
+
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $skippingNestedFiles = $false
+          foreach ($line in (Get-Content $installerFile.FullName)) {
+            if ($line -match '^NestedInstallerType:') { continue }
+            if ($line -match '^NestedInstallerFiles:') {
+              $skippingNestedFiles = $true
+              continue
+            }
+            if ($skippingNestedFiles) {
+              if ($line -match '^[A-Za-z][A-Za-z0-9]*:') {
+                $skippingNestedFiles = $false
+              } else {
+                continue
+              }
+            }
+            if ($line -match '^InstallerType:') {
+              $lines.Add('InstallerType: portable')
+            } else {
+              $lines.Add($line)
+            }
+          }
+
+          if (-not ($lines | Where-Object { $_ -match '^Commands:' })) {
+            $installerTypeIndex = -1
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match '^InstallerType:') {
+                $installerTypeIndex = $i
+                break
+              }
+            }
+            if ($installerTypeIndex -lt 0) {
+              Write-Error "InstallerType was not found in '$($installerFile.FullName)'."
+              exit 1
+            }
+            $lines.Insert($installerTypeIndex + 1, 'Commands:')
+            $lines.Insert($installerTypeIndex + 2, "- $command")
+          }
+
+          $currentArch = $null
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^- Architecture:\s*(\S+)\s*$') {
+              $currentArch = $matches[1]
+              continue
+            }
+            if ($lines[$i] -match '^\s*InstallerUrl:') {
+              if ($currentArch -eq 'x64') { $lines[$i] = "  InstallerUrl: $x64Url" }
+              elseif ($currentArch -eq 'arm64') { $lines[$i] = "  InstallerUrl: $arm64Url" }
+              continue
+            }
+            if ($lines[$i] -match '^\s*InstallerSha256:') {
+              if ($currentArch -eq 'x64') { $lines[$i] = "  InstallerSha256: $x64Sha" }
+              elseif ($currentArch -eq 'arm64') { $lines[$i] = "  InstallerSha256: $arm64Sha" }
+            }
+          }
+          Set-Content -Path $installerFile.FullName -Value ($lines -join "`n") -NoNewline
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "manifests"
+          git commit -m "Update $id to $version"
+          git push --force-with-lease origin "HEAD:$branch"
+          gh pr create `
+            --repo microsoft/winget-pkgs `
+            --head "$owner:$branch" `
+            --base master `
+            --title "Update $id to $version" `
+            --body "Automated release update for $id $version."
+          Pop-Location
 
       - name: Update existing manifest PR
         if: steps.check.outputs.skip != 'true' && steps.check.outputs.open-pr-number != ''
@@ -208,13 +322,8 @@ jobs:
           $version = "${{ inputs.version }}"
           $x64Url   = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.exe"
           $arm64Url = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.exe"
-
-          New-Item -ItemType Directory -Force -Path generated | Out-Null
-          .\wingetcreate.exe update `
-            $id `
-            --version $version `
-            --urls "$x64Url|x64" "$arm64Url|arm64" `
-            --output generated
+          $x64Sha = (Get-FileHash -Algorithm SHA256 -Path "${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.exe").Hash.ToUpper()
+          $arm64Sha = (Get-FileHash -Algorithm SHA256 -Path "${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.exe").Hash.ToUpper()
 
           gh repo clone "${{ steps.check.outputs.open-pr-head-repo }}" winget-pkgs -- --branch "${{ steps.check.outputs.open-pr-head-ref }}"
 
@@ -226,19 +335,82 @@ jobs:
           }
           $targetDir = Join-Path $targetDir $version
 
-          if (Test-Path $targetDir) {
-            Remove-Item -Recurse -Force $targetDir
-          }
-          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-
-          $manifestFiles = Get-ChildItem -Path generated -Recurse -File -Filter "*.yaml"
-          if ($manifestFiles.Count -eq 0) {
-            Write-Error "wingetcreate did not generate any YAML manifest files."
+          if (-not (Test-Path $targetDir)) {
+            Write-Error "Existing PR #${{ steps.check.outputs.open-pr-number }} does not contain expected manifest directory '$targetDir'."
             exit 1
           }
-          foreach ($file in $manifestFiles) {
-            Copy-Item $file.FullName -Destination $targetDir -Force
+
+          $installerFile = Get-ChildItem -Path $targetDir -File -Filter "*.installer.yaml" | Select-Object -First 1
+          if (-not $installerFile) {
+            Write-Error "Installer manifest was not found in '$targetDir'."
+            exit 1
           }
+
+          $installerContent = Get-Content $installerFile.FullName -Raw
+          $commandMatch = [regex]::Match($installerContent, '(?m)^\s*PortableCommandAlias:\s*(\S+)\s*$')
+          $command = if ($commandMatch.Success) { $commandMatch.Groups[1].Value } else { "${{ inputs.project-name }}" }
+
+          foreach ($file in Get-ChildItem -Path $targetDir -File -Filter "*.yaml") {
+            $content = Get-Content $file.FullName -Raw
+            $content = [regex]::Replace($content, '(?m)^(PackageVersion:\s*).+$', "`${1}$version")
+            Set-Content -Path $file.FullName -Value $content -NoNewline
+          }
+
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $skippingNestedFiles = $false
+          foreach ($line in (Get-Content $installerFile.FullName)) {
+            if ($line -match '^NestedInstallerType:') { continue }
+            if ($line -match '^NestedInstallerFiles:') {
+              $skippingNestedFiles = $true
+              continue
+            }
+            if ($skippingNestedFiles) {
+              if ($line -match '^[A-Za-z][A-Za-z0-9]*:') {
+                $skippingNestedFiles = $false
+              } else {
+                continue
+              }
+            }
+            if ($line -match '^InstallerType:') {
+              $lines.Add('InstallerType: portable')
+            } else {
+              $lines.Add($line)
+            }
+          }
+
+          if (-not ($lines | Where-Object { $_ -match '^Commands:' })) {
+            $installerTypeIndex = -1
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -match '^InstallerType:') {
+                $installerTypeIndex = $i
+                break
+              }
+            }
+            if ($installerTypeIndex -lt 0) {
+              Write-Error "InstallerType was not found in '$($installerFile.FullName)'."
+              exit 1
+            }
+            $lines.Insert($installerTypeIndex + 1, 'Commands:')
+            $lines.Insert($installerTypeIndex + 2, "- $command")
+          }
+
+          $currentArch = $null
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^- Architecture:\s*(\S+)\s*$') {
+              $currentArch = $matches[1]
+              continue
+            }
+            if ($lines[$i] -match '^\s*InstallerUrl:') {
+              if ($currentArch -eq 'x64') { $lines[$i] = "  InstallerUrl: $x64Url" }
+              elseif ($currentArch -eq 'arm64') { $lines[$i] = "  InstallerUrl: $arm64Url" }
+              continue
+            }
+            if ($lines[$i] -match '^\s*InstallerSha256:') {
+              if ($currentArch -eq 'x64') { $lines[$i] = "  InstallerSha256: $x64Sha" }
+              elseif ($currentArch -eq 'arm64') { $lines[$i] = "  InstallerSha256: $arm64Sha" }
+            }
+          }
+          Set-Content -Path $installerFile.FullName -Value ($lines -join "`n") -NoNewline
 
           Push-Location winget-pkgs
           git config user.name "github-actions[bot]"
