@@ -41,7 +41,7 @@ jobs:
           GH_TOKEN: ${{ secrets.WINGET_PAT }}
         run: |
           $id = "${{ steps.id.outputs.winget-id }}"
-          $query = "$id version ${{ inputs.version }}"
+          $query = "$id ${{ inputs.version }}"
 
           # A *merged* PR means this version is already published — nothing to do.
           $merged = gh pr list --repo microsoft/winget-pkgs --state merged --search "$query" --json number,title --limit 5 | ConvertFrom-Json
@@ -53,13 +53,28 @@ jobs:
           }
 
           # An *open* PR is NOT a reason to skip. A previous (possibly cancelled
-          # or failed) run may have opened a PR with stale hashes. Re-submitting
-          # with wingetcreate refreshes the existing PR branch with correct
-          # values, so we proceed in that case.
+          # or failed) run may have opened a PR with stale hashes. In that case,
+          # update the existing PR branch instead of submitting another PR.
           $open = gh pr list --repo microsoft/winget-pkgs --state open --search "$query" --json number,title --limit 5 | ConvertFrom-Json
           $openMatch = @($open) | Where-Object { $_.title -match [regex]::Escape($id) -and $_.title -match [regex]::Escape("${{ inputs.version }}") }
           if ($openMatch.Count -gt 0) {
-            Write-Host "An open PR already exists for ${id} ${{ inputs.version }}: $($openMatch[0].title) (#$($openMatch[0].number)). Will re-submit to refresh it."
+            $pr = gh pr view $openMatch[0].number `
+              --repo microsoft/winget-pkgs `
+              --json number,title,headRefName,headRepository,headRepositoryOwner | ConvertFrom-Json
+            $headOwner = $pr.headRepositoryOwner.login
+            $headRepoName = $pr.headRepository.name
+            $headRepo = $pr.headRepository.nameWithOwner
+            if (-not $headRepo -and $headOwner -and $headRepoName) {
+              $headRepo = "$headOwner/$headRepoName"
+            }
+            if (-not $headRepo -or -not $pr.headRefName) {
+              Write-Error "Could not resolve head branch for existing PR #$($pr.number)."
+              exit 1
+            }
+            Write-Host "An open PR already exists for ${id} ${{ inputs.version }}: $($pr.title) (#$($pr.number)). Will update ${headRepo}:$($pr.headRefName)."
+            echo "open-pr-number=$($pr.number)" >> $env:GITHUB_OUTPUT
+            echo "open-pr-head-repo=$headRepo" >> $env:GITHUB_OUTPUT
+            echo "open-pr-head-ref=$($pr.headRefName)" >> $env:GITHUB_OUTPUT
           } else {
             Write-Host "No existing PR found for ${id} ${{ inputs.version }}"
           }
@@ -111,10 +126,10 @@ jobs:
           }
           Write-Host "Release $tag is published (publishedAt: $($release.publishedAt))."
 
-          # Ensure the Windows .zip assets and the SHA256SUMS file are all present.
+          # Ensure the standalone Windows .exe assets and the SHA256SUMS file are all present.
           $required = @(
-            "${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip",
-            "${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.zip",
+            "${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.exe",
+            "${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.exe",
             "SHA256SUMS"
           )
           $names = $release.assets | ForEach-Object { $_.name }
@@ -124,7 +139,7 @@ jobs:
               exit 1
             }
           }
-          Write-Host "All required Windows assets and SHA256SUMS are present."
+          Write-Host "All required standalone Windows assets and SHA256SUMS are present."
 
       - name: Verify installer hashes match published SHA256SUMS
         if: steps.check.outputs.skip != 'true'
@@ -147,8 +162,8 @@ jobs:
           }
 
           $assets = @(
-            "${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip",
-            "${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.zip"
+            "${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.exe",
+            "${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.exe"
           )
           foreach ($asset in $assets) {
             if (-not $expected.ContainsKey($asset)) {
@@ -165,14 +180,76 @@ jobs:
           }
           Write-Host "All installer hashes match the published SHA256SUMS."
 
-      - name: Submit manifest
+      - name: Submit new manifest PR
         if: steps.check.outputs.skip != 'true'
         run: |
-          $x64Url   = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.zip"
-          $arm64Url = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.zip"
+          if ("${{ steps.check.outputs.open-pr-number }}") {
+            Write-Host "Existing PR #${{ steps.check.outputs.open-pr-number }} found; skipping new PR submission."
+            exit 0
+          }
+
+          $x64Url   = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.exe"
+          $arm64Url = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.exe"
           .\wingetcreate.exe update `
             ${{ steps.id.outputs.winget-id }} `
             --version ${{ inputs.version }} `
             --urls "$x64Url|x64" "$arm64Url|arm64" `
+            --prtitle "Update ${{ steps.id.outputs.winget-id }} to ${{ inputs.version }}" `
             --token ${{ secrets.WINGET_PAT }} `
             --submit
+
+      - name: Update existing manifest PR
+        if: steps.check.outputs.skip != 'true' && steps.check.outputs.open-pr-number != ''
+        env:
+          GH_TOKEN: ${{ secrets.WINGET_PAT }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $id = "${{ steps.id.outputs.winget-id }}"
+          $version = "${{ inputs.version }}"
+          $x64Url   = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-x86_64-pc-windows-msvc.exe"
+          $arm64Url = "https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}/${{ inputs.project-name }}-${{ inputs.version }}-aarch64-pc-windows-msvc.exe"
+
+          New-Item -ItemType Directory -Force -Path generated | Out-Null
+          .\wingetcreate.exe update `
+            $id `
+            --version $version `
+            --urls "$x64Url|x64" "$arm64Url|arm64" `
+            --output generated
+
+          gh repo clone "${{ steps.check.outputs.open-pr-head-repo }}" winget-pkgs -- --branch "${{ steps.check.outputs.open-pr-head-ref }}"
+
+          $segments = $id.Split('.')
+          $manifestRoot = Join-Path "winget-pkgs" "manifests"
+          $targetDir = Join-Path $manifestRoot $segments[0].Substring(0, 1).ToLower()
+          foreach ($segment in $segments) {
+            $targetDir = Join-Path $targetDir $segment
+          }
+          $targetDir = Join-Path $targetDir $version
+
+          if (Test-Path $targetDir) {
+            Remove-Item -Recurse -Force $targetDir
+          }
+          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+
+          $manifestFiles = Get-ChildItem -Path generated -Recurse -File -Filter "*.yaml"
+          if ($manifestFiles.Count -eq 0) {
+            Write-Error "wingetcreate did not generate any YAML manifest files."
+            exit 1
+          }
+          foreach ($file in $manifestFiles) {
+            Copy-Item $file.FullName -Destination $targetDir -Force
+          }
+
+          Push-Location winget-pkgs
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "manifests"
+          $status = git status --porcelain
+          if (-not $status) {
+            Write-Host "Existing PR #${{ steps.check.outputs.open-pr-number }} already contains the requested manifest changes."
+            Pop-Location
+            exit 0
+          }
+          git commit -m "Update $id to $version"
+          git push origin "HEAD:${{ steps.check.outputs.open-pr-head-ref }}"
+          Pop-Location
