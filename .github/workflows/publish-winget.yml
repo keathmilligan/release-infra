@@ -91,7 +91,20 @@ jobs:
             gh repo sync $fork --source microsoft/winget-pkgs --force
             Write-Host "Fork synced successfully."
           } else {
-            Write-Host "Fork $fork does not exist yet; wingetcreate will create it."
+            Write-Host "Fork $fork does not exist yet; creating it."
+            gh repo fork microsoft/winget-pkgs --clone=false
+            for ($i = 1; $i -le 30; $i++) {
+              $exists = gh repo view $fork --json name 2>$null
+              if ($exists) {
+                Write-Host "Fork $fork is ready."
+                break
+              }
+              Start-Sleep -Seconds 10
+            }
+            if (-not $exists) {
+              Write-Error "Timed out waiting for fork $fork to become available."
+              exit 1
+            }
           }
 
       - name: Verify release is published and assets are final
@@ -177,7 +190,7 @@ jobs:
           Write-Host "All installer hashes match the published SHA256SUMS."
 
       - name: Submit new manifest PR
-        if: steps.check.outputs.skip != 'true'
+        if: steps.check.outputs.skip != 'true' && steps.check.outputs.open-pr-number == ''
         env:
           GH_TOKEN: ${{ secrets.WINGET_PAT }}
         run: |
