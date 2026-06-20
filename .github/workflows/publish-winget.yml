@@ -84,7 +84,8 @@ jobs:
           # Determine the fork owner from the PAT
           $owner = (gh api user --jq .login)
           $fork = "$owner/winget-pkgs"
-          # Check if the fork exists; if not, wingetcreate will create it
+          gh auth setup-git
+          # Check if the fork exists; create it if needed.
           $exists = gh repo view $fork --json name 2>$null
           if ($exists) {
             Write-Host "Syncing fork $fork with microsoft/winget-pkgs..."
